@@ -1,3 +1,5 @@
+#include "adc.h"
+#include "calc.h"
 #include "gen_dds.h"
 #include "stm32f103x6.h"
 
@@ -22,7 +24,7 @@ extern uint32_t _ebss;
 }
 
 
-
+int g_x[ADC_SAMPLES_COUNT], g_y[ADC_SAMPLES_COUNT];
 
 void run() {
   // at start clock source = HSI
@@ -65,39 +67,101 @@ void run() {
   while ( v_to < v_end ) {
     *v_to++ = 0;
   }
-  // enable clock for PIOB, PIOC, USART1, TIM1, AFIO
-  RCC->APB2ENR |= ( RCC_APB2ENR_IOPAEN
-                  | RCC_APB2ENR_IOPBEN
-                  | RCC_APB2ENR_IOPCEN
-                  | RCC_APB2ENR_TIM1EN
-                  | RCC_APB2ENR_USART1EN
-                  | RCC_APB2ENR_AFIOEN
+  // тактирование AFIO
+  RCC->APB2ENR |= ( RCC_APB2ENR_AFIOEN
                   );
-  // PIOC13 - output push-pull, low speed
-  GPIOC->CRH = (GPIOC->CRH & ~(GPIO_CRH_MODE13_Msk | GPIO_CRH_CNF13_Msk))
-               | GPIO_CRH_MODE13_1
-               ;
   // remap USART1 (PB6 TX, PB7 RX)
   AFIO->MAPR = AFIO_MAPR_USART1_REMAP;
+  // тактирование остального на APB2
+  RCC->APB2ENR |= ( RCC_APB2ENR_IOPCEN
+                  | RCC_APB2ENR_IOPBEN
+                  | RCC_APB2ENR_IOPAEN
+                  | RCC_APB2ENR_USART1EN
+                  | RCC_APB2ENR_ADC1EN
+                  | RCC_APB2ENR_TIM1EN
+                  );
+  // USART1 TX/PB6 RX/PB7
+  GPIOB->CRL = (GPIOB->CRL & ~( GPIO_CRL_MODE7 | GPIO_CRL_CNF7
+                              | GPIO_CRL_MODE6 | GPIO_CRL_CNF6 ))
+                | GPIO_CRL_CNF7_1
+                | GPIO_CRL_MODE6_1 | GPIO_CRL_CNF6_1
+               ;
   // USART1 115200 8N1
   // 72E6 / 16 / 39.0625 = 115200
+  USART1->SR = 0;
   USART1->BRR = (39 << USART_BRR_DIV_Mantissa_Pos) | (1 << USART_BRR_DIV_Fraction_Pos);
   USART1->CR3 = 0;
   USART1->CR2 = 0;
   USART1->CR1 = USART_CR1_TE
               | USART_CR1_UE
               ;
-  //
-  printf( "Hello from china STM32F103C6 clone!\n" );
+  // PIOC13 - output push-pull, low speed
+  GPIOC->CRH = (GPIOC->CRH & ~(GPIO_CRH_MODE13_Msk | GPIO_CRH_CNF13_Msk))
+               | GPIO_CRH_MODE13_1
+               ;
+  GPIOC->BSRR = GPIO_BSRR_BS13;
+  // включаем тактирование TIM3
+  RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+  // включаем тактирование для DMA1
+  RCC->AHBENR |= RCC_AHBENR_DMA1EN;
+  // тактирование АЦП 9 МГц (72000000/8)
+  RCC->CFGR |= RCC_CFGR_ADCPRE_DIV8;
+  
   // SysTick interrupt for each millisecond
   SysTick_Config( 9000 );
   //
+  adc_init();
   gen_dds_init();
   //
   for (;;) {
-    delay_ms( 100 );
+    bool v_last_flag = adc_buffer_flag();
+    while ( adc_buffer_flag() == v_last_flag ) {}
     GPIOC->BSRR = GPIO_BSRR_BR13;
-    delay_ms( 100 );
+    // копируем выборки в буфер
+    uint16_t * v_from = adc_get_buffer();
+    for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
+      g_x[i] = ((int)*v_from++) << 16;
+      g_y[i] = 0;
+    }
+    BPF( g_x, g_y );
+    //
+    printf( "------------------------------\n" );
+    for ( int i = 0; i < 10; ++i ) {
+      printf(
+          "[%d] x = %d  | y = %d | r = %d | d = %u\n"
+        , i
+        , g_x[i] / 65536
+        , g_y[i] / 65536
+        , (unsigned int)(columnSqrt((uint64_t)( ((((int64_t)g_x[i])*g_x[i]) >> 16) + ((((int64_t)g_y[i])*g_y[i]) >> 16) )) / 256)
+        , full_atn( g_x[i], g_y[i] ) / 65536
+        );
+    }
+    printf( "------------------------------\n" );
+    delay_ms( 1000 );
+    //
+    v_last_flag = adc_buffer_flag();
+    while ( adc_buffer_flag() == v_last_flag ) {}
     GPIOC->BSRR = GPIO_BSRR_BS13;
+    // копируем выборки в буфер
+    v_from = adc_get_buffer();
+    for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
+      g_x[i] = ((int)*v_from++) << 16;
+      g_y[i] = 0;
+    }
+    BPF( g_x, g_y );
+    //
+    printf( "------------------------------\n" );
+    for ( int i = 0; i < 10; ++i ) {
+      printf(
+          "[%d] x = %d  | y = %d | r = %d | d = %u\n"
+        , i
+        , g_x[i] / 65536
+        , g_y[i] / 65536
+        , (unsigned int)(columnSqrt((uint64_t)( ((((int64_t)g_x[i])*g_x[i]) >> 16) + ((((int64_t)g_y[i])*g_y[i]) >> 16) )) / 256)
+        , full_atn( g_x[i], g_y[i] ) / 65536
+        );
+    }
+    printf( "------------------------------\n" );
+    delay_ms( 1000 );
   }
 }

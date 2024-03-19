@@ -157,11 +157,15 @@ static uint32_t g_sound_freq = 15270995;
 
 
 // настройка таймера-1
+// канал 1 - генерация "синуса" для TX
+// канал 2 - генерация "синуса" для сигнала компенсации
+// канал 3 - генерация "пинков" для АЦП (cобытие сравнения 2 раза за период)
+// канал 4 - генерация "синуса" для звука
 void gen_dds_init() {
   g_level_tx = 1024;
   g_level_comp = 512;
   g_level_sound = 2047;
-  // включаем выводы каналов CH1/PA8, CH2/PA9, CH3/PA10 таймера-1
+  // включаем выводы каналов CH1/PA8, CH2/PA9, CH3/PA11 таймера-1
   // alternate push-pull 2MHz
   GPIOA->CRH = (GPIOA->CRH & ~( GPIO_CRH_MODE8_Msk | GPIO_CRH_CNF8_Msk
                               | GPIO_CRH_MODE9_Msk | GPIO_CRH_CNF9_Msk
@@ -177,9 +181,10 @@ void gen_dds_init() {
   TIM1->PSC = 0;
   TIM1->ARR = 256;
   TIM1->RCR = 1;
-  TIM1->CCR1 = 224;
-  TIM1->CCR2 = 80;
-  TIM1->CCR3 = 128;
+  TIM1->CNT = 0;
+  TIM1->CCR1 = g_cos_table[0];
+  TIM1->CCR2 = g_cos_table[0];
+  TIM1->CCR3 = g_cos_table[0];
   TIM1->CCMR1 = TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2
               | TIM_CCMR1_OC1PE
               | TIM_CCMR1_OC2M_1 | TIM_CCMR1_OC2M_2
@@ -195,19 +200,29 @@ void gen_dds_init() {
   TIM1->BDTR = TIM_BDTR_MOE
              | TIM_BDTR_OSSR
              ;
-  TIM1->CR2 = TIM_CR2_MMS_1;
+  TIM1->CR2 = TIM_CR2_MMS_0;
   TIM1->CR1 = TIM_CR1_ARPE
             | TIM_CR1_CMS_0 | TIM_CR1_CMS_1
             | TIM_CR1_URS
             ;
   TIM1->SR = 0;
   TIM1->DIER = TIM_DIER_UIE;
+  // настраиваем таймер-3 для пинания АЦП, тактирование 36 МГц, счёт вверх до 127 (0..127, 128 тактов)
+  // запуск синхронно со стартом TIM1
+  TIM3->PSC = 0;
+  TIM3->CR1 = TIM_CR1_URS;
+  TIM3->CR2 = TIM_CR2_MMS_1;
+  TIM3->ARR = 127;
+  TIM3->CNT = 0;
+  TIM3->SMCR = TIM_SMCR_SMS_1
+             | TIM_SMCR_SMS_2
+             ;
+  // запускаем TIM1
   TIM1->CR1 |= TIM_CR1_CEN;
   __NVIC_EnableIRQ( TIM1_UP_IRQn );
   // генерируем Update Event, чтобы в "теневые" регистры попали текущие значения
   // а в буферные регистры легли новые значения (для следующего периода)
   TIM1->EGR = TIM_EGR_UG;
-
 }
 
 

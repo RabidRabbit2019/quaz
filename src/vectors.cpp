@@ -30,7 +30,7 @@ void ih_EXTI1_IRQ() {}
 void ih_EXTI2_IRQ() {}
 void ih_EXTI3_IRQ() {}
 void ih_EXTI4_IRQ() {}
-void ih_DMA1_Channel1_IRQ() {}
+void ih_DMA1_Channel1_IRQ();
 void ih_DMA1_Channel2_IRQ() {}
 void ih_DMA1_Channel3_IRQ() {}
 void ih_DMA1_Channel4_IRQ() {}
