@@ -11,6 +11,7 @@ void adc_init();
 bool adc_buffer_flag();
 bool adc_error_flag();
 uint16_t * adc_get_buffer();
+int adc_get_tx_phase();
 
 
 #endif // __ADC_H__

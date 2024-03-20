@@ -1,10 +1,14 @@
-#include "stm32f103x6.h"
-
 #include "adc.h"
+#include "gen_dds.h"
+
+#include "stm32f103x6.h"
 
 
 // двойной буфер
 uint16_t g_adc_buffer[ADC_SAMPLES_COUNT*2];
+// фазы TX
+uint32_t g_tx_phase_1 = 0;
+uint32_t g_tx_phase_2 = 0;
 
 // false - заполнилась вторая половина буфера
 // true - заполнилась первая половина буфера
@@ -20,6 +24,12 @@ bool adc_buffer_flag() {
 //
 bool adc_error_flag() {
   return g_adc_dma_error;
+}
+
+//
+int adc_get_tx_phase() {
+  uint32_t v_tx_phase = g_adc_buffer_flag ?  g_tx_phase_1 : g_tx_phase_2;
+  return (int)(((360ull << 16) * v_tx_phase) / 0x1'0000'0000ull);
 }
 
 //
@@ -83,9 +93,13 @@ void ih_DMA1_Channel1_IRQ() {
     //
     if ( 0 != (v_dma_status & DMA_ISR_HTIF1 ) ) {
       // набрали первую половину буфера
+      // фаза для начала второй половины буфера
+      g_tx_phase_2 = get_tx_phase();
       g_adc_buffer_flag = true;
     } else {
       // мы заполнили вторую половину буфера
+      // фаза для начала первой половины буфера
+      g_tx_phase_1 = get_tx_phase();
       g_adc_buffer_flag = false;
     }
   }

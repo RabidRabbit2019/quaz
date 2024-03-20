@@ -116,52 +116,36 @@ void run() {
   for (;;) {
     bool v_last_flag = adc_buffer_flag();
     while ( adc_buffer_flag() == v_last_flag ) {}
-    GPIOC->BSRR = GPIO_BSRR_BR13;
     // копируем выборки в буфер
     uint16_t * v_from = adc_get_buffer();
+    int v_tx_phase = adc_get_tx_phase();
     for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
       g_x[i] = ((int)*v_from++) << 16;
       g_y[i] = 0;
     }
     BPF( g_x, g_y );
     //
-    printf( "------------------------------\n" );
+    printf( "---- %d.%03d ----\n", v_tx_phase / 65536, ((v_tx_phase & 0xFFFF) * 1000) / 65536 );
     for ( int i = 0; i < 10; ++i ) {
+      int v_d = full_atn( g_x[i], g_y[i] ) - v_tx_phase;
+      if ( v_d < 0 ) {
+        v_d += 360 << 16;
+      }
       printf(
-          "[%d] x = %d  | y = %d | r = %d | d = %u\n"
+          "[%d] x = %d  | y = %d | r = %d | d = %d.%03d\n"
         , i
         , g_x[i] / 65536
         , g_y[i] / 65536
         , (unsigned int)(columnSqrt((uint64_t)( ((((int64_t)g_x[i])*g_x[i]) >> 16) + ((((int64_t)g_y[i])*g_y[i]) >> 16) )) / 256)
-        , full_atn( g_x[i], g_y[i] ) / 65536
+        , v_d / 65536, ((v_d & 0xFFFF) * 1000) / 65536
         );
     }
     printf( "------------------------------\n" );
-    delay_ms( 1000 );
-    //
-    v_last_flag = adc_buffer_flag();
-    while ( adc_buffer_flag() == v_last_flag ) {}
-    GPIOC->BSRR = GPIO_BSRR_BS13;
-    // копируем выборки в буфер
-    v_from = adc_get_buffer();
-    for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
-      g_x[i] = ((int)*v_from++) << 16;
-      g_y[i] = 0;
+    if ( 0 == (GPIOC->ODR & GPIO_ODR_ODR13) ) {
+      GPIOC->BSRR = GPIO_BSRR_BS13;
+    } else {
+      GPIOC->BSRR = GPIO_BSRR_BR13;
     }
-    BPF( g_x, g_y );
-    //
-    printf( "------------------------------\n" );
-    for ( int i = 0; i < 10; ++i ) {
-      printf(
-          "[%d] x = %d  | y = %d | r = %d | d = %u\n"
-        , i
-        , g_x[i] / 65536
-        , g_y[i] / 65536
-        , (unsigned int)(columnSqrt((uint64_t)( ((((int64_t)g_x[i])*g_x[i]) >> 16) + ((((int64_t)g_y[i])*g_y[i]) >> 16) )) / 256)
-        , full_atn( g_x[i], g_y[i] ) / 65536
-        );
-    }
-    printf( "------------------------------\n" );
-    delay_ms( 1000 );
+    delay_ms( 999 );
   }
 }

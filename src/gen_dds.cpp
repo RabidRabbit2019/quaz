@@ -150,11 +150,19 @@ static volatile uint32_t g_level_sound = 0;
 // начальная фаза генератора компенсации разбаланса
 // запоминается в настройках
 static uint32_t g_phase_comp_start = 0;
-// частота (сдвиг фазы генератора) TX и сигнала компенсации, по-умолчанию значение для частоты 6 кГц
-static uint32_t g_gen_freq = 183251938;
+// частота (сдвиг фазы генератора) TX и сигнала компенсации
+static uint32_t g_gen_freq = 268435521; // ~8789 Гц
 // частота (сдвиг фазы генератора) звука, по-умолчанию для частоты 500 Гц
 static uint32_t g_sound_freq = 15270995;
 
+
+uint32_t get_tx_phase() {
+  return g_phase_tx;
+}
+
+uint32_t get_tx_freq() {
+  return g_gen_freq;
+}
 
 // настройка таймера-1
 // канал 1 - генерация "синуса" для TX
@@ -162,7 +170,7 @@ static uint32_t g_sound_freq = 15270995;
 // канал 3 - генерация "пинков" для АЦП (cобытие сравнения 2 раза за период)
 // канал 4 - генерация "синуса" для звука
 void gen_dds_init() {
-  g_level_tx = 1024;
+  g_level_tx = 2047;
   g_level_comp = 512;
   g_level_sound = 2047;
   // включаем выводы каналов CH1/PA8, CH2/PA9, CH3/PA11 таймера-1
@@ -178,13 +186,17 @@ void gen_dds_init() {
   // настраиваем таймер-1
   // тактируется от APB2 без делителя (72МГц), двунаправленный счётчик, APR=256, период 512 тактов
   // ШИМ 8 битов. Update Event один раз за период, т.е. RCR=1
-  TIM1->PSC = 0;
-  TIM1->ARR = 256;
-  TIM1->RCR = 1;
-  TIM1->CNT = 0;
-  TIM1->CCR1 = g_cos_table[0];
-  TIM1->CCR2 = g_cos_table[0];
-  TIM1->CCR3 = g_cos_table[0];
+  // Output Trigger по включению таймера для одновременного запуска TIM3
+  TIM1->PSC = 0; // без делителя
+  TIM1->ARR = 256; // докуда считать
+  TIM1->RCR = 1; // "делитель" частоты Update Event
+  TIM1->CNT = 0; // на всяк случ сброс счётчика
+  TIM1->CCR1 = g_cos_table[0]; // TX начинаем с нулевой фазы
+  // сигнал компенсации по фазе от g_phase_comp_start
+  // 1024 отсчёта - период "синусоиды", 2^32 - период фазы генератора (DDS)
+  TIM1->CCR2 = g_cos_table[(1024ull * g_phase_comp_start) / 0x1'0000'0000ull];
+  TIM1->CCR3 = g_cos_table[0]; // звук, с нулевой фазы, тут пофик
+  // режимы сравнения для трёх каналов
   TIM1->CCMR1 = TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2
               | TIM_CCMR1_OC1PE
               | TIM_CCMR1_OC2M_1 | TIM_CCMR1_OC2M_2
@@ -200,7 +212,7 @@ void gen_dds_init() {
   TIM1->BDTR = TIM_BDTR_MOE
              | TIM_BDTR_OSSR
              ;
-  TIM1->CR2 = TIM_CR2_MMS_0;
+  TIM1->CR2 = TIM_CR2_MMS_0; // запуск таймера - событие TRGO
   TIM1->CR1 = TIM_CR1_ARPE
             | TIM_CR1_CMS_0 | TIM_CR1_CMS_1
             | TIM_CR1_URS
