@@ -29,7 +29,7 @@ bool adc_error_flag() {
 //
 int adc_get_tx_phase() {
   uint32_t v_tx_phase = g_adc_buffer_flag ?  g_tx_phase_1 : g_tx_phase_2;
-  return (int)(((360ull << 16) * v_tx_phase) / 0x1'0000'0000ull);
+  return v_tx_phase;
 }
 
 //

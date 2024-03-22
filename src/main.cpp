@@ -25,6 +25,7 @@ extern uint32_t _ebss;
 
 
 int g_x[ADC_SAMPLES_COUNT], g_y[ADC_SAMPLES_COUNT];
+uint16_t g_adc_copy[ADC_SAMPLES_COUNT];
 
 void run() {
   // at start clock source = HSI
@@ -118,21 +119,23 @@ void run() {
     while ( adc_buffer_flag() == v_last_flag ) {}
     // копируем выборки в буфер
     uint16_t * v_from = adc_get_buffer();
-    int v_tx_phase = adc_get_tx_phase();
+    uint32_t v_tx_phase = adc_get_tx_phase();
+    int v_tx_phase_deg = (int)(((360ull << 16) * v_tx_phase) / 0x1'0000'0000ull);
     for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
-      g_x[i] = ((int)*v_from++) << 16;
+      g_adc_copy[i] = v_from[i];
+      g_x[i] = ((int)v_from[i]) << 16;
       g_y[i] = 0;
     }
     BPF( g_x, g_y );
     //
-    printf( "---- %d.%03d ----\n", v_tx_phase / 65536, ((v_tx_phase & 0xFFFF) * 1000) / 65536 );
-    for ( int i = 0; i < 10; ++i ) {
-      int v_d = full_atn( g_x[i], g_y[i] ) - v_tx_phase;
+    printf( "---- %3d.%03d ----\n", v_tx_phase_deg / 65536, ((v_tx_phase_deg & 0xFFFF) * 1000) / 65536 );
+    for ( int i = 0; i < 17; ++i ) {
+      int v_d = full_atn( g_x[i], g_y[i] ) - v_tx_phase_deg;
       if ( v_d < 0 ) {
         v_d += 360 << 16;
       }
       printf(
-          "[%d] x = %d  | y = %d | r = %d | d = %d.%03d\n"
+          "[%d] x = %4d | y = %4d | r = %4d | d = %3d.%03d\n"
         , i
         , g_x[i] / 65536
         , g_y[i] / 65536
@@ -140,7 +143,89 @@ void run() {
         , v_d / 65536, ((v_d & 0xFFFF) * 1000) / 65536
         );
     }
+    // теперь попробуем изобразить синхронный детектор
+    // 1-й и 4-й квадранты X+, 2-й и 3-й - X-
+    // 1-й квадрант Y+, 2-й квадрант Y-
+    // 360 градусов - это 2^32
+    // шаг сэмплирования по фазе = g_gen_freq / 2
+    // начальная фаза известна.
+    int sumXpos = 0;
+    int sumXneg = 0;
+    int sumYpos = 0;
+    int sumYneg = 0;
+    int cntXpos = 0;
+    int cntXneg = 0;
+    int cntYpos = 0;
+    int cntYneg = 0;
+    // начальная фаза сигнала в окне выборки
+    uint32_t samplePhaseStep = get_tx_freq() / 2;
+    uint64_t samplePhase = v_tx_phase + (samplePhaseStep / 2);
+    // ограничение по целому числу периодов сигнала, помещающихся в окне выборки АЦП
+    // т.к. нам надо рассматривать только целое количество периодов
+    // отсюда граничение по минимальной частоте, в окно выборки АЦП должен целиком
+    // уместиться хотя бы один период сигнала, т.е. g_gen_freq > (2^32)/4
+    uint64_t samplePhaseEdge = (((64ull * get_tx_freq()) >> 32) << 32) + samplePhase;
+    //
+    for ( int i = 0; i < ADC_SAMPLES_COUNT && samplePhase < samplePhaseEdge; ++i ) {
+      //
+      uint32_t v_sp = samplePhase & 0xFFFF'FFFFul;
+      if ( v_sp < 0x4000'0000ul ) {
+        // 1-й квадрант
+        sumXpos += g_adc_copy[i];
+        sumYpos += g_adc_copy[i];
+        ++cntXpos;
+        ++cntYpos;
+      } else {
+        if ( v_sp < 0x8000'0000ul ) {
+          // 2-й квадрант
+          sumXneg += g_adc_copy[i];
+          sumYneg += g_adc_copy[i];
+          ++cntXneg;
+          ++cntYneg;
+        } else {
+          if ( v_sp < 0xC000'0000ul ) {
+            // 3-й квадрант
+            sumXneg += g_adc_copy[i];
+            ++cntXneg;
+          } else {
+            // 4-й квадрант
+            sumXpos += g_adc_copy[i];
+            ++cntXpos;
+          }
+        }
+      }
+      //
+      samplePhase += samplePhaseStep;
+    }
+    // всем значениям добавляем фиксированную точку, 10 двоичных разрядов
+    sumXpos *= 1024;
+    sumXneg *= 1024;
+    sumYpos *= 1024;
+    sumYneg *= 1024;
+    int sumAll = sumXpos + sumXneg;
+    int cntAll = cntXpos + cntXneg;
+    printf( "sumAll/cntAll: [%8d/%8d]\n", sumAll / 1024, cntAll );
+    // определяем среднее значение
+    int v_avg = sumAll / cntAll;
+    // считаем X и Y
+    int v_Y = (sumYpos - (v_avg * cntYpos)) + (sumYneg - (v_avg * cntYneg));
+    int v_X = (sumXpos - (v_avg * cntXpos)) - (sumXneg - (v_avg * cntXneg));
+    v_Y = (v_Y / (cntYpos + cntYneg)) * 64;
+    v_X = (v_X / (cntXpos + cntXneg)) * 64;
+    int v_d = full_atn( v_X, v_Y );
+    if ( v_d < 0 ) {
+      v_d += 360 << 16;
+    }
+    //
+    printf(
+        "X/Y: [%5d/%5d], r = %4d, d = %3d.%03d\n"
+      , ((int)v_X) / 65536
+      , ((int)v_Y) / 65536
+      , (unsigned int)(columnSqrt( (uint64_t)( ((((int64_t)v_X)*v_X) >> 16) + ((((int64_t)v_Y)*v_Y) >> 16) ) ) / 256)
+      , v_d / 65536, ((v_d & 0xFFFF) * 1000) / 65536
+      );
     printf( "------------------------------\n" );
+    //
     if ( 0 == (GPIOC->ODR & GPIO_ODR_ODR13) ) {
       GPIOC->BSRR = GPIO_BSRR_BS13;
     } else {

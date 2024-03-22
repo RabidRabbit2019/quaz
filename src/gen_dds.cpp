@@ -151,7 +151,7 @@ static volatile uint32_t g_level_sound = 0;
 // запоминается в настройках
 static uint32_t g_phase_comp_start = 0;
 // частота (сдвиг фазы генератора) TX и сигнала компенсации
-static uint32_t g_gen_freq = 268435521; // ~8789 Гц
+static uint32_t g_gen_freq = 268435456; // 8789.0625 Гц
 // частота (сдвиг фазы генератора) звука, по-умолчанию для частоты 500 Гц
 static uint32_t g_sound_freq = 15270995;
 
@@ -198,12 +198,9 @@ void gen_dds_init() {
   TIM1->CCR3 = g_cos_table[0]; // звук, с нулевой фазы, тут пофик
   // режимы сравнения для трёх каналов
   TIM1->CCMR1 = TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2
-              | TIM_CCMR1_OC1PE
               | TIM_CCMR1_OC2M_1 | TIM_CCMR1_OC2M_2
-              | TIM_CCMR1_OC2PE
               ;
   TIM1->CCMR2 = TIM_CCMR2_OC3M_1 | TIM_CCMR2_OC3M_2
-              | TIM_CCMR2_OC3PE
               ;
   TIM1->CCER = TIM_CCER_CC1E
              | TIM_CCER_CC2E
@@ -213,8 +210,7 @@ void gen_dds_init() {
              | TIM_BDTR_OSSR
              ;
   TIM1->CR2 = TIM_CR2_MMS_0; // запуск таймера - событие TRGO
-  TIM1->CR1 = TIM_CR1_ARPE
-            | TIM_CR1_CMS_0 | TIM_CR1_CMS_1
+  TIM1->CR1 = TIM_CR1_CMS_0 | TIM_CR1_CMS_1
             | TIM_CR1_URS
             ;
   TIM1->SR = 0;
@@ -234,7 +230,7 @@ void gen_dds_init() {
   __NVIC_EnableIRQ( TIM1_UP_IRQn );
   // генерируем Update Event, чтобы в "теневые" регистры попали текущие значения
   // а в буферные регистры легли новые значения (для следующего периода)
-  TIM1->EGR = TIM_EGR_UG;
+  // TIM1->EGR = TIM_EGR_UG;
 }
 
 
