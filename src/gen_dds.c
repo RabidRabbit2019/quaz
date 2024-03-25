@@ -194,7 +194,7 @@ void gen_dds_init() {
   TIM1->CCR1 = g_cos_table[0]; // TX начинаем с нулевой фазы
   // сигнал компенсации по фазе от g_phase_comp_start
   // 1024 отсчёта - период "синусоиды", 2^32 - период фазы генератора (DDS)
-  TIM1->CCR2 = g_cos_table[(1024ull * g_phase_comp_start) / 0x1'0000'0000ull];
+  TIM1->CCR2 = g_cos_table[(1024ull * g_phase_comp_start) / 0x100000000ull];
   TIM1->CCR3 = g_cos_table[0]; // звук, с нулевой фазы, тут пофик
   // режимы сравнения для трёх каналов
   TIM1->CCMR1 = TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2
@@ -234,8 +234,6 @@ void gen_dds_init() {
 }
 
 
-extern "C" {
-  
 // событие update таймера-1, обновляем регистры сравнения
 // эти значения перепишутся в "теневые" регистры при следующем Update Event
 void ih_TIM1_UP_IRQ() {
@@ -254,6 +252,3 @@ void ih_TIM1_UP_IRQ() {
   // сбрасываем флаги прерывания
   TIM1->SR = 0;
 }
-
-}
-

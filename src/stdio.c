@@ -71,7 +71,6 @@
 //         Local Functions
 //------------------------------------------------------------------------------
 
-extern "C" {
 //------------------------------------------------------------------------------
 // Writes a character inside the given string. Returns 1.
 // \param pStr  Storage string.
@@ -562,7 +561,3 @@ signed int fputs(const char *pStr, FILE *pStream)
 
     return num;
 }
-
-
-}
-

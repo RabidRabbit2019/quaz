@@ -77,9 +77,6 @@ void adc_init() {
 }
 
 
-//
-extern "C" {
-  
 void ih_DMA1_Channel1_IRQ() {
   // прервание от канала DMA
   uint32_t v_dma_status = DMA1->ISR;
@@ -110,7 +107,3 @@ void ih_DMA1_Channel1_IRQ() {
              | DMA_IFCR_CGIF1
              ;
 }
-
-}
-
-

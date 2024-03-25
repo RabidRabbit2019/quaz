@@ -6,7 +6,6 @@ volatile uint32_t g_milliseconds = 0;
 
 typedef void (*IntFunc) (void);
 
-extern "C" {
 void Reset_Handler() { run(); for (;;) {} }
 void ih_NMI() {}
 void ih_HardFault() {}
@@ -62,7 +61,7 @@ void ih_USART3_IRQ() {}
 void ih_EXTI15_10_IRQ() {}
 void ih_RTC_Alarm_IRQ() {}
 void ih_USBWakeUp_IRQ() {}
-}
+
 
 __attribute__ ((section(".isr_vector")))
 IntFunc exception_table[] = {
