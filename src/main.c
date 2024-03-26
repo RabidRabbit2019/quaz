@@ -82,7 +82,7 @@ void run() {
   GPIOB->CRL = (GPIOB->CRL & ~( GPIO_CRL_MODE7 | GPIO_CRL_CNF7
                               | GPIO_CRL_MODE6 | GPIO_CRL_CNF6 ))
                 | GPIO_CRL_CNF7_1
-                | GPIO_CRL_MODE6_1 | GPIO_CRL_CNF6_1
+                | GPIO_CRL_MODE6_0 | GPIO_CRL_CNF6_1
                ;
   // USART1 115200 8N1
   // 72E6 / 16 / 39.0625 = 115200
@@ -130,13 +130,13 @@ void run() {
     // БПФ по данным от АЦП
     BPF( g_x, g_y );
     printf( "---- %3d.%03d ----\n", v_tx_phase_deg / 65536, ((v_tx_phase_deg & 0xFFFF) * 1000) / 65536 );
-    for ( int i = 0; i < 17; ++i ) {
+    for ( int i = 0; i < 13; ++i ) {
       int v_d = full_atn( g_x[i], g_y[i] ) - v_tx_phase_deg;
       if ( v_d < 0 ) {
         v_d += 360 << 16;
       }
       printf(
-          "[%d] x = %4d | y = %4d | r = %4d | d = %3d.%03d\n"
+          "[%2d] x = %4d | y = %4d | r = %4d | d = %3d.%03d\n"
         , i
         , g_x[i] / 65536
         , g_y[i] / 65536
@@ -242,6 +242,6 @@ void run() {
     } else {
       GPIOC->BSRR = GPIO_BSRR_BR13;
     }
-    //delay_ms( 999 );
+    delay_ms( 915 );
   }
 }
