@@ -1,7 +1,7 @@
 .PHONY: clean
 
 release:
-	arm-none-eabi-gcc -c -Wall -Wextra -Os -s \
+	arm-none-eabi-gcc -c -Wall -Wextra -Os -flto -s \
 	  main.c \
 	  trace.c \
 	  stdio.c \
@@ -11,6 +11,9 @@ release:
 	  display.c \
 	  fonts/font_bmp.c \
 	  fonts/font_24_26.c \
+	  -ffunction-sections -fdata-sections -mcpu=cortex-m3 -mthumb -lnosys \
+	  -nostartfiles -ffreestanding -specs=nosys.specs -pipe
+	arm-none-eabi-gcc -c -Wall -Wextra -Os -s \
 	  vectors.c \
 	  -ffunction-sections -fdata-sections -mcpu=cortex-m3 -mthumb -lnosys \
 	  -nostartfiles -ffreestanding -specs=nosys.specs -pipe
@@ -26,7 +29,7 @@ release:
 	  font_bmp.o \
 	  font_24_26.o \
 	  -Wl,-gc-sections -mcpu=cortex-m3 -mthumb -lnosys -nostartfiles -ffreestanding \
-	  -specs=nosys.specs -TSTM32F103C8Tx_FLASH.ld -pipe -o a.elf
+	  -specs=nosys.specs -TSTM32F103C8Tx_FLASH.ld -pipe -flto -o a.elf
 
 debug:
 	arm-none-eabi-gcc -c -Wall -Wextra -O0 -g \

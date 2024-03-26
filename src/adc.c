@@ -54,7 +54,8 @@ void adc_init() {
              | DMA_IFCR_CGIF1
              ;
   DMA1_Channel1->CNDTR = ADC_SAMPLES_COUNT*2;
-  DMA1_Channel1->CCR = DMA_CCR_MSIZE_0
+  DMA1_Channel1->CCR = DMA_CCR_PL
+                     | DMA_CCR_MSIZE_0
                      | DMA_CCR_PSIZE_0
                      | DMA_CCR_MINC
                      | DMA_CCR_TEIE

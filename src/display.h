@@ -41,6 +41,7 @@ void display_init();
 void display_write_char(uint16_t x, uint16_t y, display_char_s * a_data);
 void display_write_string(uint16_t x, uint16_t y, const char* str, const packed_font_desc_s * fnt, uint16_t color, uint16_t bgcolor);
 void display_fill_rectangle_dma( uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
+void display_fill_rectangle_dma_fast( uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t color );
 void display_write_string_with_bg(
             int a_x
           , int a_y

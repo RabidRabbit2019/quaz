@@ -23,6 +23,7 @@ extern uint32_t _sidata, _sdata, _edata, _sbss, _ebss;
 int g_x[ADC_SAMPLES_COUNT], g_y[ADC_SAMPLES_COUNT];
 uint16_t g_adc_copy[ADC_SAMPLES_COUNT];
 char g_str[256];
+int g_last_column = 0;
 
 void run() {
   // copy initialized data
@@ -114,6 +115,7 @@ void run() {
   for (;;) {
     bool v_last_flag = adc_buffer_flag();
     while ( adc_buffer_flag() == v_last_flag ) {}
+    uint32_t v_start_ts = g_milliseconds;
     // быстренько получим адрес буфера и фазу генератора на момент начала буфера
     uint16_t * v_from = adc_get_buffer();
     uint32_t v_tx_phase = adc_get_tx_phase();
@@ -127,7 +129,6 @@ void run() {
     int v_tx_phase_deg = (int)(((360ull << 16) * v_tx_phase) / 0x100000000ull);
     // БПФ по данным от АЦП
     BPF( g_x, g_y );
-    //
     printf( "---- %3d.%03d ----\n", v_tx_phase_deg / 65536, ((v_tx_phase_deg & 0xFFFF) * 1000) / 65536 );
     for ( int i = 0; i < 17; ++i ) {
       int v_d = full_atn( g_x[i], g_y[i] ) - v_tx_phase_deg;
@@ -204,7 +205,7 @@ void run() {
     sumYneg *= 1024;
     int sumAll = sumXpos + sumXneg;
     int cntAll = cntXpos + cntXneg;
-    printf( "sumAll/cntAll: [%8d/%8d]\n", sumAll / 1024, cntAll );
+    //printf( "sumAll/cntAll: [%8d/%8d]\n", sumAll / 1024, cntAll );
     // определяем среднее значение
     int v_avg = sumAll / cntAll;
     // считаем X и Y
@@ -227,16 +228,20 @@ void run() {
       );
     printf( "------------------------------\n" );
     //
-    sprintf( g_str, "a| %4d", v_a );
-    display_write_string_with_bg( 0, 0, 160, 26, g_str, &font_24_26_font, DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK );
-    sprintf( g_str, "d| %3d.%03d", v_d / 65536, ((v_d & 0xFFFF) * 1000) / 65536 );
-    display_write_string_with_bg( 0, 26, 160, 26, g_str, &font_24_26_font, DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK );
+    int v_column = (v_d / 8) / 65536;
+    display_fill_rectangle_dma_fast( g_last_column * 7, 0, 7, 64, 0 );
+    display_fill_rectangle_dma_fast( v_column * 7, 0, 7, 64, 0xFF );
+    g_last_column = v_column;
+    //
+    uint32_t v_time = g_milliseconds - v_start_ts;
+    sprintf( g_str, "%u", (unsigned int)v_time );
+    display_write_string_with_bg( 0, 64, 64, 26, g_str, &font_24_26_font, DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK );
     //
     if ( 0 == (GPIOC->ODR & GPIO_ODR_ODR13) ) {
       GPIOC->BSRR = GPIO_BSRR_BS13;
     } else {
       GPIOC->BSRR = GPIO_BSRR_BR13;
     }
-    delay_ms( 999 );
+    //delay_ms( 999 );
   }
 }

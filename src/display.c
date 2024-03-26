@@ -127,7 +127,8 @@ static void display_spi_write_end() {
   uint32_t v_from = g_milliseconds;
   // ждём завершения приёма по каналу 2 либо ошибки по каналам 2 и 3
   while ( ((uint32_t)(g_milliseconds - v_from)) < 50u ) {
-    if ( 0 != (DMA1->ISR & (DMA_ISR_TEIF2 | DMA_ISR_TEIF3 | DMA_ISR_TCIF2)) ) {
+    uint32_t v_flags = DMA1->ISR;
+    if ( 0 != (v_flags & (DMA_ISR_TEIF2 | DMA_ISR_TEIF3 | DMA_ISR_TCIF2)) ) {
       break;
     }
   }
@@ -188,7 +189,10 @@ static void display_set_addr_window_dma( uint16_t x, uint16_t y, uint16_t w, uin
 }
 
 
-void display_fill_rectangle_dma( uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
+// рисуем прямоугольник, заполненный цветом
+// подготавливается буфер размером w пикселов
+// и далее через DMA отправляется h раз
+void display_fill_rectangle_dma( uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color ) {
   // clipping
   if((x >= DISPLAY_WIDTH) || (y >= DISPLAY_HEIGHT)) return;
   if((x + w - 1) >= DISPLAY_WIDTH) {
@@ -213,6 +217,51 @@ void display_fill_rectangle_dma( uint16_t x, uint16_t y, uint16_t w, uint16_t h,
   for( y = h; y > 0; y-- ) {
       display_spi_write( (uint8_t *)line, line_bytes );
   }
+  display_deselect();
+}
+
+
+// рисуем прямоугольник, заполненный цветом, составленным из двух одинаковых байтов
+// здесь буфер не требуется, через DMA сразу передаются все пиксели прямоугольника
+// соответственно, адрес источника в памяти не меняется, т.е. передаётся один байт color
+void display_fill_rectangle_dma_fast( uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t color ) {
+  // clipping
+  if((x >= DISPLAY_WIDTH) || (y >= DISPLAY_HEIGHT)) return;
+  if((x + w - 1) >= DISPLAY_WIDTH) {
+    w = DISPLAY_WIDTH - x;
+  }
+  if((y + h - 1) >= DISPLAY_HEIGHT) {
+    h = DISPLAY_HEIGHT - y;
+  }
+  // количество передаваемых байтов
+  uint32_t v_bytes = ((uint32_t)w) * h * sizeof(uint16_t);
+  //
+  display_select();
+  display_set_addr_window_dma( x, y, w, h );
+  // запуск передачи немного отличается от стандартного
+  // читаем регистр данных на всяк случай
+  SPI1->DR;
+  // чистим флаги каналов 2 и 3
+  DMA1->IFCR = DMA_IFCR_CTCIF2
+             | DMA_IFCR_CHTIF2
+             | DMA_IFCR_CTEIF2
+             | DMA_IFCR_CGIF2
+             | DMA_IFCR_CTCIF3
+             | DMA_IFCR_CHTIF3
+             | DMA_IFCR_CTEIF3
+             | DMA_IFCR_CGIF3
+             ;
+  // включаем DMA1 канал 2 на приём
+  DMA1_Channel2->CMAR = (uint32_t)&g_dummy;
+  DMA1_Channel2->CNDTR = v_bytes;
+  DMA1_Channel2->CCR = DMA_CCR_EN;
+  // включаем DMA1 канал 3 на передачу
+  DMA1_Channel3->CMAR = (uint32_t)&color;
+  DMA1_Channel3->CNDTR = v_bytes;
+  DMA1_Channel3->CCR = DMA_CCR_DIR
+                     | DMA_CCR_EN
+                     ;
+  display_spi_write_end();
   display_deselect();
 }
 
