@@ -10,7 +10,7 @@ release:
 	  calc.c \
 	  display.c \
 	  fonts/font_bmp.c \
-	  fonts/font_24_26.c \
+	  fonts/font_25_30.c \
 	  -ffunction-sections -fdata-sections -mcpu=cortex-m3 -mthumb -lnosys \
 	  -nostartfiles -ffreestanding -specs=nosys.specs -pipe
 	arm-none-eabi-gcc -c -Wall -Wextra -Os -s \
@@ -27,7 +27,7 @@ release:
 	  calc.o \
 	  display.o \
 	  font_bmp.o \
-	  font_24_26.o \
+	  font_25_30.o \
 	  -Wl,-gc-sections -mcpu=cortex-m3 -mthumb -lnosys -nostartfiles -ffreestanding \
 	  -specs=nosys.specs -TSTM32F103C8Tx_FLASH.ld -pipe -flto -o a.elf
 
@@ -42,7 +42,7 @@ debug:
 	  calc.c \
 	  display.c \
 	  fonts/font_bmp.c \
-	  fonts/font_24_26.c \
+	  fonts/font_25_30.c \
 	  -ffunction-sections -fdata-sections -mcpu=cortex-m3 -mthumb -lnosys -nostartfiles \
 	  -ffreestanding -specs=nosys.specs -pipe
 	arm-none-eabi-gcc \
@@ -55,7 +55,7 @@ debug:
 	  calc.o \
 	  display.o \
 	  font_bmp.o \
-	  font_24_26.o \
+	  font_25_30.o \
 	  -Wl,-gc-sections -mcpu=cortex-m3 -mthumb -lnosys -nostartfiles -ffreestanding \
 	  -specs=nosys.specs -TSTM32F103C8Tx_FLASH.ld -o a.elf
 

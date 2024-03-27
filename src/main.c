@@ -2,7 +2,7 @@
 #include "calc.h"
 #include "gen_dds.h"
 #include "display.h"
-#include "fonts/font_24_26.h"
+#include "fonts/font_25_30.h"
 #include "stm32f103x6.h"
 
 #include <stdio.h>
@@ -68,7 +68,7 @@ void run() {
   RCC->APB2ENR |= ( RCC_APB2ENR_AFIOEN
                   );
   // remap USART1 (PB6 TX, PB7 RX)
-  AFIO->MAPR = AFIO_MAPR_USART1_REMAP;
+  AFIO->MAPR = AFIO_MAPR_USART1_REMAP | AFIO_MAPR_I2C1_REMAP;
   // тактирование остального на APB2
   RCC->APB2ENR |= ( RCC_APB2ENR_IOPCEN
                   | RCC_APB2ENR_IOPBEN
@@ -98,8 +98,10 @@ void run() {
                | GPIO_CRH_MODE13_1
                ;
   GPIOC->BSRR = GPIO_BSRR_BS13;
-  // включаем тактирование TIM3
-  RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+  // включаем тактирование TIM3 и I2C1
+  RCC->APB1ENR |= ( RCC_APB1ENR_TIM3EN
+                  | RCC_APB1ENR_I2C1EN
+                  );
   // включаем тактирование для DMA1
   RCC->AHBENR |= RCC_AHBENR_DMA1EN;
   // тактирование АЦП 9 МГц (72000000/8)
@@ -111,6 +113,9 @@ void run() {
   adc_init();
   gen_dds_init();
   display_init();
+  display_write_string_with_bg( 0, 100, 320, 40, "https://www.md4u.ru", &font_25_30_font, DISPLAY_COLOR_WHITE, DISPLAY_COLOR_DARKBLUE );
+  delay_ms(3000u);
+  display_fill_rectangle_dma( 0, 100, 320, 40, 0 );
   //
   for (;;) {
     bool v_last_flag = adc_buffer_flag();
@@ -164,7 +169,7 @@ void run() {
     // ограничение по целому числу периодов сигнала, помещающихся в окне выборки АЦП
     // т.к. нам надо рассматривать только целое количество периодов
     // отсюда граничение по минимальной частоте, в окно выборки АЦП должен целиком
-    // уместиться хотя бы один период сигнала, т.е. g_gen_freq > (2^32)/4
+    // уместиться хотя бы один период сигнала, т.е. g_gen_freq >= 67108864 (2197.265625 Гц)
     uint64_t samplePhaseEdge = (((64ull * get_tx_freq()) >> 32) << 32) + samplePhase;
     //
     for ( int i = 0; i < ADC_SAMPLES_COUNT && samplePhase < samplePhaseEdge; ++i ) {
@@ -235,7 +240,7 @@ void run() {
     //
     uint32_t v_time = g_milliseconds - v_start_ts;
     sprintf( g_str, "%u", (unsigned int)v_time );
-    display_write_string_with_bg( 0, 64, 64, 26, g_str, &font_24_26_font, DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK );
+    display_write_string_with_bg( 0, 64, 64, 30, g_str, &font_25_30_font, DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK );
     //
     if ( 0 == (GPIOC->ODR & GPIO_ODR_ODR13) ) {
       GPIOC->BSRR = GPIO_BSRR_BS13;
