@@ -170,7 +170,7 @@ uint32_t get_tx_freq() {
 // канал 3 - генерация "пинков" для АЦП (cобытие сравнения 2 раза за период)
 // канал 4 - генерация "синуса" для звука
 void gen_dds_init() {
-  g_level_tx = 2047;
+  g_level_tx = 600; // по базовой схеме ~60 мА
   g_level_comp = 512;
   g_level_sound = 2047;
   // включаем выводы каналов CH1/PA8, CH2/PA9, CH3/PA11 таймера-1
@@ -197,10 +197,10 @@ void gen_dds_init() {
   TIM1->CCR2 = g_cos_table[(1024ull * g_phase_comp_start) / 0x100000000ull];
   TIM1->CCR3 = g_cos_table[0]; // звук, с нулевой фазы, тут пофик
   // режимы сравнения для трёх каналов
-  TIM1->CCMR1 = TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2
-              | TIM_CCMR1_OC2M_1 | TIM_CCMR1_OC2M_2
+  TIM1->CCMR1 = TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1PE
+              | TIM_CCMR1_OC2M_1 | TIM_CCMR1_OC2M_2 | TIM_CCMR1_OC2PE
               ;
-  TIM1->CCMR2 = TIM_CCMR2_OC3M_1 | TIM_CCMR2_OC3M_2
+  TIM1->CCMR2 = TIM_CCMR2_OC3M_1 | TIM_CCMR2_OC3M_2 | TIM_CCMR2_OC3PE
               ;
   TIM1->CCER = TIM_CCER_CC1E
              | TIM_CCER_CC2E

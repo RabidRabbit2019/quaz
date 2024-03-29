@@ -155,14 +155,9 @@ void run() {
     // 360 градусов - это 2^32
     // шаг сэмплирования по фазе = g_gen_freq / 2
     // начальная фаза известна.
-    int sumXpos = 0;
-    int sumXneg = 0;
-    int sumYpos = 0;
-    int sumYneg = 0;
-    int cntXpos = 0;
-    int cntXneg = 0;
-    int cntYpos = 0;
-    int cntYneg = 0;
+    int sumX = 0;
+    int sumY = 0;
+    int cnt = 0;
     // начальная фаза сигнала в окне выборки
     uint32_t samplePhaseStep = get_tx_freq() / 2;
     uint64_t samplePhase = v_tx_phase + (samplePhaseStep / 2);
@@ -175,59 +170,46 @@ void run() {
     for ( int i = 0; i < ADC_SAMPLES_COUNT && samplePhase < samplePhaseEdge; ++i ) {
       //
       uint32_t v_sp = samplePhase & 0xFFFFFFFFul;
+      ++cnt;
       if ( v_sp < 0x40000000ul ) {
         // 1-й квадрант
-        sumXpos += g_adc_copy[i];
-        sumYpos += g_adc_copy[i];
-        ++cntXpos;
-        ++cntYpos;
+        sumX += g_adc_copy[i];
+        sumY += g_adc_copy[i];
       } else {
         if ( v_sp < 0x80000000ul ) {
           // 2-й квадрант
-          sumXneg += g_adc_copy[i];
-          sumYneg += g_adc_copy[i];
-          ++cntXneg;
-          ++cntYneg;
+          sumX -= g_adc_copy[i];
+          sumY += g_adc_copy[i];
         } else {
           if ( v_sp < 0xC0000000ul ) {
             // 3-й квадрант
-            sumXneg += g_adc_copy[i];
-            ++cntXneg;
+            sumX -= g_adc_copy[i];
+            sumY -= g_adc_copy[i];
           } else {
             // 4-й квадрант
-            sumXpos += g_adc_copy[i];
-            ++cntXpos;
+            sumX += g_adc_copy[i];
+            sumY -= g_adc_copy[i];
           }
         }
       }
       //
       samplePhase += samplePhaseStep;
     }
+    printf( "sumX: %8d, sumY: %8d, cnt: %4d\n", sumX, sumY, cnt );
     // всем значениям добавляем фиксированную точку, 10 двоичных разрядов
-    sumXpos *= 1024;
-    sumXneg *= 1024;
-    sumYpos *= 1024;
-    sumYneg *= 1024;
-    int sumAll = sumXpos + sumXneg;
-    int cntAll = cntXpos + cntXneg;
-    //printf( "sumAll/cntAll: [%8d/%8d]\n", sumAll / 1024, cntAll );
-    // определяем среднее значение
-    int v_avg = sumAll / cntAll;
     // считаем X и Y
-    int v_Y = (sumYpos - (v_avg * cntYpos)) + (sumYneg - (v_avg * cntYneg));
-    int v_X = (sumXpos - (v_avg * cntXpos)) - (sumXneg - (v_avg * cntXneg));
-    v_Y = (v_Y / (cntYpos + cntYneg)) * 64;
-    v_X = (v_X / (cntXpos + cntXneg)) * 64;
-    int v_d = full_atn( v_X, v_Y );
+    int v_X = ((sumX * 1024) / cnt) * 64;
+    int v_Y = ((sumY * 1024) / cnt) * 64;
+    int v_d = full_atn( v_X, v_Y ) - v_tx_phase_deg;
     if ( v_d < 0 ) {
       v_d += 360 << 16;
     }
     //
     unsigned int v_a = (unsigned int)(columnSqrt( (uint64_t)( ((((int64_t)v_X)*v_X) >> 16) + ((((int64_t)v_Y)*v_Y) >> 16) ) ) / 256);
     printf(
-        "X/Y: [%5d/%5d], r = %4d, d = %3d.%03d\n"
-      , ((int)v_X) / 65536
-      , ((int)v_Y) / 65536
+        "X/Y: [%5d.%03d/%5d.%03d], r = %4d, d = %3d.%03d\n"
+      , v_X / 65536, ((v_X & 0xFFFF) * 1000) / 65536
+      , v_Y / 65536, ((v_Y & 0xFFFF) * 1000) / 65536
       , v_a
       , v_d / 65536, ((v_d & 0xFFFF) * 1000) / 65536
       );
