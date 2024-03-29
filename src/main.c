@@ -23,7 +23,8 @@ extern uint32_t _sidata, _sdata, _edata, _sbss, _ebss;
 int g_x[ADC_SAMPLES_COUNT], g_y[ADC_SAMPLES_COUNT];
 uint16_t g_adc_copy[ADC_SAMPLES_COUNT];
 char g_str[256];
-int g_last_column = 0;
+int g_last_column_fft = 0;
+int g_last_column_sd = 0;
 
 void run() {
   // copy initialized data
@@ -116,11 +117,14 @@ void run() {
   display_write_string_with_bg( 0, 100, 320, 40, "https://www.md4u.ru", &font_25_30_font, DISPLAY_COLOR_WHITE, DISPLAY_COLOR_DARKBLUE );
   delay_ms(3000u);
   display_fill_rectangle_dma( 0, 100, 320, 40, 0 );
+  // индекс
+  int fft_idx = (int)((64ull * get_tx_freq()) >> 32);
+  int v_column = 0;
   //
   for (;;) {
     bool v_last_flag = adc_buffer_flag();
     while ( adc_buffer_flag() == v_last_flag ) {}
-    uint32_t v_start_ts = g_milliseconds;
+    //uint32_t v_start_ts = g_milliseconds;
     // быстренько получим адрес буфера и фазу генератора на момент начала буфера
     uint16_t * v_from = adc_get_buffer();
     uint32_t v_tx_phase = adc_get_tx_phase();
@@ -139,6 +143,12 @@ void run() {
       int v_d = full_atn( g_x[i], g_y[i] ) - v_tx_phase_deg;
       if ( v_d < 0 ) {
         v_d += 360 << 16;
+      }
+      if ( i == fft_idx ) {
+        v_column = (v_d / 8) / 65536;
+        display_fill_rectangle_dma_fast( g_last_column_fft * 7, 0, 7, 64, 0 );
+        display_fill_rectangle_dma_fast( v_column * 7, 0, 7, 64, 0x07 );
+        g_last_column_fft = v_column;
       }
       printf(
           "[%2d] x = %4d | y = %4d | r = %4d | d = %3d.%03d\n"
@@ -215,14 +225,15 @@ void run() {
       );
     printf( "------------------------------\n" );
     //
-    int v_column = (v_d / 8) / 65536;
-    display_fill_rectangle_dma_fast( g_last_column * 7, 0, 7, 64, 0 );
-    display_fill_rectangle_dma_fast( v_column * 7, 0, 7, 64, 0xFF );
-    g_last_column = v_column;
-    //
+    v_column = (v_d / 8) / 65536;
+    display_fill_rectangle_dma_fast( g_last_column_sd * 7, 64, 7, 64, 0 );
+    display_fill_rectangle_dma_fast( v_column * 7, 64, 7, 64, 0xE0 );
+    g_last_column_sd = v_column;
+    /*
     uint32_t v_time = g_milliseconds - v_start_ts;
     sprintf( g_str, "%u", (unsigned int)v_time );
     display_write_string_with_bg( 0, 64, 64, 30, g_str, &font_25_30_font, DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK );
+    */
     //
     if ( 0 == (GPIOC->ODR & GPIO_ODR_ODR13) ) {
       GPIOC->BSRR = GPIO_BSRR_BS13;

@@ -15,11 +15,12 @@ typedef struct {
   // частота (сдвиг фазы генератора) TX и сигнала компенсации
   uint32_t gen_freq;
   // угол "феррита", число с фиксированной точкой 16.16, может быть отрицательным
-  int ferrite_angle;
+  int ferrite_angle_fft;
+  int ferrite_angle_sd;
   // ширина маски в градусах, маска считается от угла "феррита"
   uint32_t mask_width;
   // зарезервировано
-  uint32_t reserved[8];
+  uint32_t reserved[7];
   // "хэш" для проверки правильности считывания из FLASH
   uint32_t crc32;
 } settings_t;
