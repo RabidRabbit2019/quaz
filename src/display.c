@@ -290,9 +290,9 @@ void display_init() {
   display_deselect();
   GPIOB->BSRR = GPIO_BSRR_BS10;
   // тактирование SPI1 включено в main.cpp
-  // SPI clock = APB2 clock / 4 (72 / 8 = 9 MHz), master mode
+  // SPI clock = APB2 clock / 4 (72 / 4 = 18 MHz), master mode
   SPI1->CR1 = SPI_CR1_MSTR
-            | SPI_CR1_BR_1
+            | SPI_CR1_BR_0
             | SPI_CR1_SPE
             | SPI_CR1_SSI
             | SPI_CR1_SSM

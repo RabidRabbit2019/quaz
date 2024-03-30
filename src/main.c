@@ -2,6 +2,7 @@
 #include "calc.h"
 #include "gen_dds.h"
 #include "display.h"
+#include "settings.h"
 #include "fonts/font_25_30.h"
 #include "stm32f103x6.h"
 
@@ -103,14 +104,17 @@ void run() {
   RCC->APB1ENR |= ( RCC_APB1ENR_TIM3EN
                   | RCC_APB1ENR_I2C1EN
                   );
-  // включаем тактирование для DMA1
-  RCC->AHBENR |= RCC_AHBENR_DMA1EN;
+  // включаем тактирование для DMA1 и CRC
+  RCC->AHBENR |= ( RCC_AHBENR_DMA1EN
+                 | RCC_AHBENR_CRCEN
+                 );
   // тактирование АЦП 9 МГц (72000000/8)
   RCC->CFGR |= RCC_CFGR_ADCPRE_DIV8;
   
   // SysTick interrupt for each millisecond
   SysTick_Config( 9000 );
   //
+  settings_init();
   adc_init();
   gen_dds_init();
   display_init();

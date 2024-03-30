@@ -9,6 +9,7 @@ release:
 	  adc.c \
 	  calc.c \
 	  display.c \
+	  settings.c \
 	  fonts/font_bmp.c \
 	  fonts/font_25_30.c \
 	  -ffunction-sections -fdata-sections -mcpu=cortex-m3 -mthumb -lnosys \
@@ -26,6 +27,7 @@ release:
 	  adc.o \
 	  calc.o \
 	  display.o \
+	  settings.o \
 	  font_bmp.o \
 	  font_25_30.o \
 	  -Wl,-gc-sections -mcpu=cortex-m3 -mthumb -lnosys -nostartfiles -ffreestanding \
@@ -41,6 +43,7 @@ debug:
 	  adc.c \
 	  calc.c \
 	  display.c \
+	  settings.c \
 	  fonts/font_bmp.c \
 	  fonts/font_25_30.c \
 	  -ffunction-sections -fdata-sections -mcpu=cortex-m3 -mthumb -lnosys -nostartfiles \
@@ -54,6 +57,7 @@ debug:
 	  adc.o \
 	  calc.o \
 	  display.o \
+	  settings.o \
 	  font_bmp.o \
 	  font_25_30.o \
 	  -Wl,-gc-sections -mcpu=cortex-m3 -mthumb -lnosys -nostartfiles -ffreestanding \
