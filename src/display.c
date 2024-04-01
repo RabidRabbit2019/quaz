@@ -290,12 +290,17 @@ void display_init() {
   display_deselect();
   GPIOB->BSRR = GPIO_BSRR_BS10;
   // тактирование SPI1 включено в main.cpp
-  // SPI clock = APB2 clock / 4 (72 / 4 = 18 MHz), master mode
+  // SPI clock = APB2 clock / 4 (72 / 4 = 18 MHz), master mode, SPI mode 3
+  // на счёт SPI mode в даташите на ILI9341 непонятки. в таймингах последовательного
+  // интерфейса явно нарисована картина SPI mode 3, а в описании передачи данных - SPI mode 0
+  // так что выбираем SPI mode 3
   SPI1->CR1 = SPI_CR1_MSTR
             | SPI_CR1_BR_0
             | SPI_CR1_SPE
             | SPI_CR1_SSI
             | SPI_CR1_SSM
+            | SPI_CR1_CPOL
+            | SPI_CR1_CPHA
             ;
   // настройки DMA для SPI1
   // тактирование DMA1 включено в main.cpp
@@ -324,7 +329,9 @@ void display_init() {
   delay_ms(6);
   display_write_cmd_dma( ILI9341_DISPLAY_ON );
   display_deselect();
-  display_fill_rectangle_dma( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_COLOR_BLACK );
+  display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT/3, DISPLAY_COLOR_BLACK );
+  display_fill_rectangle_dma_fast( 0, DISPLAY_HEIGHT/3, DISPLAY_WIDTH, DISPLAY_HEIGHT/3, DISPLAY_COLOR_BLACK );
+  display_fill_rectangle_dma_fast( 0, 2*DISPLAY_HEIGHT/3, DISPLAY_WIDTH, DISPLAY_HEIGHT/3, DISPLAY_COLOR_BLACK );
 }
 
 

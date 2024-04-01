@@ -3,6 +3,8 @@
 #include "gen_dds.h"
 #include "display.h"
 #include "settings.h"
+#include "buttons.h"
+#include "gui.h"
 #include "fonts/font_25_30.h"
 #include "stm32f103x6.h"
 
@@ -20,12 +22,6 @@ void delay_ms( uint32_t a_ms ) {
 
 extern uint32_t _sidata, _sdata, _edata, _sbss, _ebss;
 
-
-int g_x[ADC_SAMPLES_COUNT], g_y[ADC_SAMPLES_COUNT];
-uint16_t g_adc_copy[ADC_SAMPLES_COUNT];
-char g_str[256];
-int g_last_column_fft = 0;
-int g_last_column_sd = 0;
 
 void run() {
   // copy initialized data
@@ -115,135 +111,17 @@ void run() {
   SysTick_Config( 9000 );
   //
   settings_init();
+  buttons_init();
   adc_init();
   gen_dds_init();
   display_init();
   display_write_string_with_bg( 0, 100, 320, 40, "https://www.md4u.ru", &font_25_30_font, DISPLAY_COLOR_WHITE, DISPLAY_COLOR_DARKBLUE );
   delay_ms(3000u);
   display_fill_rectangle_dma( 0, 100, 320, 40, 0 );
-  // индекс
-  int fft_idx = (int)((64ull * get_tx_freq()) >> 32);
-  int v_column = 0;
-  //
+  // основной цикл
   for (;;) {
-    bool v_last_flag = adc_buffer_flag();
-    while ( adc_buffer_flag() == v_last_flag ) {}
-    //uint32_t v_start_ts = g_milliseconds;
-    // быстренько получим адрес буфера и фазу генератора на момент начала буфера
-    uint16_t * v_from = adc_get_buffer();
-    uint32_t v_tx_phase = adc_get_tx_phase();
-    // копируем выборки в буфер
-    for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
-      g_adc_copy[i] = v_from[i];
-      g_x[i] = ((int)v_from[i]) << 16;
-      g_y[i] = 0;
-    }
-    // вычисляем фазу в градусах
-    int v_tx_phase_deg = (int)(((360ull << 16) * v_tx_phase) / 0x100000000ull);
-    // БПФ по данным от АЦП
-    BPF( g_x, g_y );
-    printf( "---- %3d.%03d ----\n", v_tx_phase_deg / 65536, ((v_tx_phase_deg & 0xFFFF) * 1000) / 65536 );
-    for ( int i = 0; i < 13; ++i ) {
-      int v_d = full_atn( g_x[i], g_y[i] ) - v_tx_phase_deg;
-      if ( v_d < 0 ) {
-        v_d += 360 << 16;
-      }
-      if ( i == fft_idx ) {
-        v_column = (v_d / 8) / 65536;
-        display_fill_rectangle_dma_fast( g_last_column_fft * 7, 0, 7, 64, 0 );
-        display_fill_rectangle_dma_fast( v_column * 7, 0, 7, 64, 0x07 );
-        g_last_column_fft = v_column;
-      }
-      printf(
-          "[%2d] x = %4d | y = %4d | r = %4d | d = %3d.%03d\n"
-        , i
-        , g_x[i] / 65536
-        , g_y[i] / 65536
-        , (unsigned int)(columnSqrt((uint64_t)( ((((int64_t)g_x[i])*g_x[i]) >> 16) + ((((int64_t)g_y[i])*g_y[i]) >> 16) )) / 256)
-        , v_d / 65536, ((v_d & 0xFFFF) * 1000) / 65536
-        );
-    }
-    // теперь попробуем изобразить синхронный детектор
-    // 1-й и 4-й квадранты X+, 2-й и 3-й - X-
-    // 1-й квадрант Y+, 2-й квадрант Y-
-    // 360 градусов - это 2^32
-    // шаг сэмплирования по фазе = g_gen_freq / 2
-    // начальная фаза известна.
-    int sumX = 0;
-    int sumY = 0;
-    int cnt = 0;
-    // начальная фаза сигнала в окне выборки
-    uint32_t samplePhaseStep = get_tx_freq() / 2;
-    uint64_t samplePhase = v_tx_phase + (samplePhaseStep / 2);
-    // ограничение по целому числу периодов сигнала, помещающихся в окне выборки АЦП
-    // т.к. нам надо рассматривать только целое количество периодов
-    // отсюда граничение по минимальной частоте, в окно выборки АЦП должен целиком
-    // уместиться хотя бы один период сигнала, т.е. g_gen_freq >= 67108864 (2197.265625 Гц)
-    uint64_t samplePhaseEdge = (((64ull * get_tx_freq()) >> 32) << 32) + samplePhase;
-    //
-    for ( int i = 0; i < ADC_SAMPLES_COUNT && samplePhase < samplePhaseEdge; ++i ) {
-      //
-      uint32_t v_sp = samplePhase & 0xFFFFFFFFul;
-      ++cnt;
-      if ( v_sp < 0x40000000ul ) {
-        // 1-й квадрант
-        sumX += g_adc_copy[i];
-        sumY += g_adc_copy[i];
-      } else {
-        if ( v_sp < 0x80000000ul ) {
-          // 2-й квадрант
-          sumX -= g_adc_copy[i];
-          sumY += g_adc_copy[i];
-        } else {
-          if ( v_sp < 0xC0000000ul ) {
-            // 3-й квадрант
-            sumX -= g_adc_copy[i];
-            sumY -= g_adc_copy[i];
-          } else {
-            // 4-й квадрант
-            sumX += g_adc_copy[i];
-            sumY -= g_adc_copy[i];
-          }
-        }
-      }
-      //
-      samplePhase += samplePhaseStep;
-    }
-    printf( "sumX: %8d, sumY: %8d, cnt: %4d\n", sumX, sumY, cnt );
-    // всем значениям добавляем фиксированную точку, 10 двоичных разрядов
-    // считаем X и Y
-    int v_X = ((sumX * 1024) / cnt) * 64;
-    int v_Y = ((sumY * 1024) / cnt) * 64;
-    int v_d = full_atn( v_X, v_Y ) - v_tx_phase_deg;
-    if ( v_d < 0 ) {
-      v_d += 360 << 16;
-    }
-    //
-    unsigned int v_a = (unsigned int)(columnSqrt( (uint64_t)( ((((int64_t)v_X)*v_X) >> 16) + ((((int64_t)v_Y)*v_Y) >> 16) ) ) / 256);
-    printf(
-        "X/Y: [%5d.%03d/%5d.%03d], r = %4d, d = %3d.%03d\n"
-      , v_X / 65536, ((v_X & 0xFFFF) * 1000) / 65536
-      , v_Y / 65536, ((v_Y & 0xFFFF) * 1000) / 65536
-      , v_a
-      , v_d / 65536, ((v_d & 0xFFFF) * 1000) / 65536
-      );
-    printf( "------------------------------\n" );
-    //
-    v_column = (v_d / 8) / 65536;
-    display_fill_rectangle_dma_fast( g_last_column_sd * 7, 64, 7, 64, 0 );
-    display_fill_rectangle_dma_fast( v_column * 7, 64, 7, 64, 0xE0 );
-    g_last_column_sd = v_column;
-    /*
-    uint32_t v_time = g_milliseconds - v_start_ts;
-    sprintf( g_str, "%u", (unsigned int)v_time );
-    display_write_string_with_bg( 0, 64, 64, 30, g_str, &font_25_30_font, DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK );
-    */
-    //
-    if ( 0 == (GPIOC->ODR & GPIO_ODR_ODR13) ) {
-      GPIOC->BSRR = GPIO_BSRR_BS13;
-    } else {
-      GPIOC->BSRR = GPIO_BSRR_BR13;
-    }
-    delay_ms( 915 );
+    buttons_scan();
+    gui_process();
+    delay_ms( 1000u );
   }
 }

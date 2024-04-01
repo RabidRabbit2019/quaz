@@ -1,4 +1,6 @@
+#include "settings.h"
 #include "stm32f103x6.h"
+
 
 // dds генераторы для TX, компенсации разбаланса и звука
 
@@ -151,9 +153,9 @@ static volatile uint32_t g_level_sound = 0;
 // запоминается в настройках
 static uint32_t g_phase_comp_start = 0;
 // частота (сдвиг фазы генератора) TX и сигнала компенсации
-static uint32_t g_gen_freq = 268435456; // 8789.0625 Гц
-// частота (сдвиг фазы генератора) звука, по-умолчанию для частоты 500 Гц
-static uint32_t g_sound_freq = 15270995;
+static uint32_t g_gen_freq = 0;
+// частота (сдвиг фазы генератора) звука
+static uint32_t g_sound_freq = 0;
 
 
 uint32_t get_tx_phase() {
@@ -170,9 +172,13 @@ uint32_t get_tx_freq() {
 // канал 3 - генерация "пинков" для АЦП (cобытие сравнения 2 раза за период)
 // канал 4 - генерация "синуса" для звука
 void gen_dds_init() {
-  g_level_tx = 600; // по базовой схеме ~60 мА
-  g_level_comp = 512;
-  g_level_sound = 2047;
+  // настройки генераторов из профиля
+  settings_t * v_profile = settings_get_current_profile();
+  g_level_tx = v_profile->level_tx; // по базовой схеме ~60 мА
+  g_level_comp = v_profile->level_comp;
+  g_level_sound = v_profile->level_sound;
+  g_gen_freq = v_profile->gen_freq;
+  g_phase_comp_start = v_profile->phase_comp_start;
   // включаем выводы каналов CH1/PA8, CH2/PA9, CH3/PA11 таймера-1
   // alternate push-pull 2MHz
   GPIOA->CRH = (GPIOA->CRH & ~( GPIO_CRH_MODE8_Msk | GPIO_CRH_CNF8_Msk
