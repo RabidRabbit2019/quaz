@@ -238,30 +238,36 @@ void display_fill_rectangle_dma_fast( uint16_t x, uint16_t y, uint16_t w, uint16
   //
   display_select();
   display_set_addr_window_dma( x, y, w, h );
-  // запуск передачи немного отличается от стандартного
-  // читаем регистр данных на всяк случай
-  SPI1->DR;
-  // чистим флаги каналов 2 и 3
-  DMA1->IFCR = DMA_IFCR_CTCIF2
-             | DMA_IFCR_CHTIF2
-             | DMA_IFCR_CTEIF2
-             | DMA_IFCR_CGIF2
-             | DMA_IFCR_CTCIF3
-             | DMA_IFCR_CHTIF3
-             | DMA_IFCR_CTEIF3
-             | DMA_IFCR_CGIF3
-             ;
-  // включаем DMA1 канал 2 на приём
-  DMA1_Channel2->CMAR = (uint32_t)&g_dummy;
-  DMA1_Channel2->CNDTR = v_bytes;
-  DMA1_Channel2->CCR = DMA_CCR_EN;
-  // включаем DMA1 канал 3 на передачу
-  DMA1_Channel3->CMAR = (uint32_t)&color;
-  DMA1_Channel3->CNDTR = v_bytes;
-  DMA1_Channel3->CCR = DMA_CCR_DIR
-                     | DMA_CCR_EN
-                     ;
-  display_spi_write_end();
+  //
+  while ( 0 != v_bytes ) {
+    // огрничение на одну передачу через DMA - 65535 элементов
+    uint32_t v_bytes_to_write = (v_bytes <= 65535) ? v_bytes : 65535;
+    // запуск передачи немного отличается от стандартного
+    // читаем регистр данных на всяк случай
+    SPI1->DR;
+    // чистим флаги каналов 2 и 3
+    DMA1->IFCR = DMA_IFCR_CTCIF2
+               | DMA_IFCR_CHTIF2
+               | DMA_IFCR_CTEIF2
+               | DMA_IFCR_CGIF2
+               | DMA_IFCR_CTCIF3
+               | DMA_IFCR_CHTIF3
+               | DMA_IFCR_CTEIF3
+               | DMA_IFCR_CGIF3
+               ;
+    // включаем DMA1 канал 2 на приём
+    DMA1_Channel2->CMAR = (uint32_t)&g_dummy;
+    DMA1_Channel2->CNDTR = v_bytes_to_write;
+    DMA1_Channel2->CCR = DMA_CCR_EN;
+    // включаем DMA1 канал 3 на передачу
+    DMA1_Channel3->CMAR = (uint32_t)&color;
+    DMA1_Channel3->CNDTR = v_bytes_to_write;
+    DMA1_Channel3->CCR = DMA_CCR_DIR
+                       | DMA_CCR_EN
+                       ;
+    display_spi_write_end();
+    v_bytes -= v_bytes_to_write;
+  }
   display_deselect();
 }
 
@@ -329,9 +335,7 @@ void display_init() {
   delay_ms(6);
   display_write_cmd_dma( ILI9341_DISPLAY_ON );
   display_deselect();
-  display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT/3, DISPLAY_COLOR_BLACK );
-  display_fill_rectangle_dma_fast( 0, DISPLAY_HEIGHT/3, DISPLAY_WIDTH, DISPLAY_HEIGHT/3, DISPLAY_COLOR_BLACK );
-  display_fill_rectangle_dma_fast( 0, 2*DISPLAY_HEIGHT/3, DISPLAY_WIDTH, DISPLAY_HEIGHT/3, DISPLAY_COLOR_BLACK );
+  display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_BYTE_COLOR_BLACK );
 }
 
 

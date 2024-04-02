@@ -175,6 +175,7 @@ void settings_init() {
     g_profiles[i].level_sound = 500;
     g_profiles[i].level_tx = 600;
     g_profiles[i].mask_width = 16;
+    g_profiles[i].barrier_level = 99;
     g_profiles[i].phase_comp_start = 0;
     for ( int r = 0; r < (int)(sizeof(g_profiles[0].reserved)/sizeof(g_profiles[0].reserved[0])); ++r ) {
       g_profiles[i].reserved[r] = 0;

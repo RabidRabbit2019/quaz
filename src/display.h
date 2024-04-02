@@ -36,6 +36,14 @@
 #define DISPLAY_COLOR_DARKYELLOW  RGB565( 63,  63,   0)
 #define DISPLAY_COLOR_DARKGRAY    RGB565( 63,  63,  63)
 
+#define DISPLAY_BYTE_COLOR_BLACK          0
+#define DISPLAY_BYTE_COLOR_RED            0xE0
+#define DISPLAY_BYTE_COLOR_GREEN          0x07
+#define DISPLAY_BYTE_COLOR_BLUE           0x18
+#define DISPLAY_BYTE_COLOR_DARK_RED       0x60
+#define DISPLAY_BYTE_COLOR_DARK_GREEN     0x03
+#define DISPLAY_BYTE_COLOR_DARK_BLUE      0x08
+
 
 void display_init();
 void display_write_char(uint16_t x, uint16_t y, display_char_s * a_data);

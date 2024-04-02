@@ -92,14 +92,12 @@ void run() {
               | USART_CR1_UE
               ;
   // PIOC13 - output push-pull, low speed
-  GPIOC->CRH = (GPIOC->CRH & ~(GPIO_CRH_MODE13_Msk | GPIO_CRH_CNF13_Msk))
+  GPIOC->CRH = (GPIOC->CRH & ~(GPIO_CRH_MODE13 | GPIO_CRH_CNF13))
                | GPIO_CRH_MODE13_1
                ;
   GPIOC->BSRR = GPIO_BSRR_BS13;
-  // включаем тактирование TIM3 и I2C1
-  RCC->APB1ENR |= ( RCC_APB1ENR_TIM3EN
-                  | RCC_APB1ENR_I2C1EN
-                  );
+  // включаем тактирование TIM3
+  RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
   // включаем тактирование для DMA1 и CRC
   RCC->AHBENR |= ( RCC_AHBENR_DMA1EN
                  | RCC_AHBENR_CRCEN
@@ -115,13 +113,20 @@ void run() {
   adc_init();
   gen_dds_init();
   display_init();
+  //
   display_write_string_with_bg( 0, 100, 320, 40, "https://www.md4u.ru", &font_25_30_font, DISPLAY_COLOR_WHITE, DISPLAY_COLOR_DARKBLUE );
   delay_ms(3000u);
-  display_fill_rectangle_dma( 0, 100, 320, 40, 0 );
+  gui_init();
   // основной цикл
   for (;;) {
     buttons_scan();
     gui_process();
+    //
+    if ( 0 == (GPIOC->ODR & GPIO_ODR_ODR13) ) {
+      GPIOC->BSRR = GPIO_BSRR_BS13;
+    } else {
+      GPIOC->BSRR = GPIO_BSRR_BR13;
+    }
     delay_ms( 1000u );
   }
 }
