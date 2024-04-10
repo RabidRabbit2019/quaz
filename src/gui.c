@@ -10,7 +10,7 @@
 #include <stdio.h>
 
 
-#define VDI_LINES_HEIGHT    48
+#define VDI_LINES_HEIGHT    45
 #define VDI_SECTOR_DEGREES  8
 #define VDI_LINES_WIDTH     (DISPLAY_WIDTH*VDI_SECTOR_DEGREES/360)
 #define VDI_FFT_COLOR       0x07
@@ -27,6 +27,8 @@ static char g_str[256];
 static int g_last_column_fft = 0;
 static int g_last_column_sd = 0;
 
+static int g_main_item = 0;
+
 
 void delay_ms( uint32_t a_ms );
 
@@ -36,11 +38,11 @@ void gui_init() {
   // здесь отрисовка статических элементов экрана
   // чистим экран
   display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_BYTE_COLOR_BLACK );
-  // строка "Барьер"
+  // строка "Порог"
   display_write_string_with_bg(
         0, VDI_LINES_HEIGHT*2 + font_25_30_font.m_row_height
       , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
-      , "Барьер"
+      , "Порог"
       , &font_25_30_font
       , DISPLAY_COLOR_WHITE
       , DISPLAY_COLOR_DARKBLUE
@@ -66,6 +68,42 @@ void gui_init() {
   sprintf( g_str, "%u", (unsigned int)v_settings->level_sound );
   display_write_string_with_bg(
         DISPLAY_WIDTH*2/3, VDI_LINES_HEIGHT*2 + (font_25_30_font.m_row_height * 2)
+      , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+      , g_str
+      , &font_25_30_font
+      , DISPLAY_COLOR_WHITE
+      , DISPLAY_COLOR_DARKGRAY
+      );
+  // строка "Феррит"
+  display_write_string_with_bg(
+        0, VDI_LINES_HEIGHT*2 + (font_25_30_font.m_row_height * 3)
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "Феррит"
+      , &font_25_30_font
+      , DISPLAY_COLOR_GREEN
+      , DISPLAY_COLOR_DARKBLUE
+      );
+  sprintf( g_str, "%u", ((unsigned int)v_settings->ferrite_angle_fft) >> 16 );
+  display_write_string_with_bg(
+        DISPLAY_WIDTH*2/3, VDI_LINES_HEIGHT*2 + (font_25_30_font.m_row_height * 3)
+      , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+      , g_str
+      , &font_25_30_font
+      , DISPLAY_COLOR_WHITE
+      , DISPLAY_COLOR_DARKGRAY
+      );
+  // строка "Феррит"
+  display_write_string_with_bg(
+        0, VDI_LINES_HEIGHT*2 + (font_25_30_font.m_row_height * 4)
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "Феррит"
+      , &font_25_30_font
+      , DISPLAY_COLOR_RED
+      , DISPLAY_COLOR_DARKBLUE
+      );
+  sprintf( g_str, "%u", ((unsigned int)v_settings->ferrite_angle_sd) >> 16 );
+  display_write_string_with_bg(
+        DISPLAY_WIDTH*2/3, VDI_LINES_HEIGHT*2 + (font_25_30_font.m_row_height * 4)
       , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
       , g_str
       , &font_25_30_font
@@ -211,6 +249,7 @@ static void mh_rx_balance();
 static void mh_mask();
 static void mh_ferrite();
 static void mh_power();
+static void mh_save_profile();
 
 typedef void (*menu_item_handler_t)(void);
 
@@ -226,6 +265,7 @@ static const menu_item_t g_top_menu[] = {
 , {"Маска", mh_mask}
 , {"Калибровка", mh_ferrite}
 , {"Питание", mh_power}
+, {"Сохранить", mh_save_profile}
 };
 
 
@@ -279,4 +319,8 @@ static void mh_ferrite() {
 
 
 static void mh_power() {
+}
+
+
+static void mh_save_profile() {
 }

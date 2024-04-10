@@ -2,7 +2,7 @@
 #include "stm32f103x6.h"
 
 
-#define BT_COUNT     4
+#define BT_COUNT     5
 
 #define BT_IGNORE_INTERVAL_MS   50u
 
@@ -11,7 +11,8 @@ static uint32_t g_buttons_change = 0;
 static uint32_t g_buttons_wait_ms[BT_COUNT];
 static const uint32_t g_buttons_masks[BT_COUNT] = {
   BT_OK_mask
-, BT_ESC_mask
+, BT_UP_mask
+, BT_DOWN_mask
 , BT_INC_mask
 , BT_DEC_mask
 };
@@ -32,17 +33,20 @@ uint32_t get_buttons_state() {
 
 void buttons_init() {
   // PB12..PB15 входы с подтяжкой к питанию
-  GPIOB->CRH = (GPIOC->CRH & ~( GPIO_CRH_MODE12 | GPIO_CRH_CNF12
+  GPIOB->CRH = (GPIOC->CRH & ~( GPIO_CRH_MODE11 | GPIO_CRH_CNF11
+                              | GPIO_CRH_MODE12 | GPIO_CRH_CNF12
                               | GPIO_CRH_MODE13 | GPIO_CRH_CNF13
                               | GPIO_CRH_MODE14 | GPIO_CRH_CNF14
                               | GPIO_CRH_MODE15 | GPIO_CRH_CNF15 ))
+               | GPIO_CRH_CNF11_1
                | GPIO_CRH_CNF12_1
                | GPIO_CRH_CNF13_1
                | GPIO_CRH_CNF14_1
                | GPIO_CRH_CNF15_1
                ;
   GPIOB->ODR |= ( BT_OK_mask
-                | BT_ESC_mask
+                | BT_UP_mask
+                | BT_DOWN_mask
                 | BT_INC_mask
                 | BT_DEC_mask
                 );
