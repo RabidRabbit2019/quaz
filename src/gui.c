@@ -136,11 +136,12 @@ static void gui_main() {
   BPF( g_x, g_y );
   printf( "---- %3d.%03d ----\n", v_tx_phase_deg / 65536, ((v_tx_phase_deg & 0xFFFF) * 1000) / 65536 );
   for ( int i = 0; i < 13; ++i ) {
-    int v_d = full_atn( g_x[i], g_y[i] ) - v_tx_phase_deg;
+    int v_len = g_x[i];
+    int v_d = full_atn( &v_len, g_y[i] ) - v_tx_phase_deg;
     if ( v_d < 0 ) {
       v_d += 360 << 16;
     }
-    unsigned int v_len = (unsigned int)(columnSqrt((uint64_t)( ((((int64_t)g_x[i])*g_x[i]) >> 16) + ((((int64_t)g_y[i])*g_y[i]) >> 16) )) / 256);
+    v_len /= 65536;
     if ( i == fft_idx ) {
       // показометр "VDI"
       v_column = (v_d / VDI_SECTOR_DEGREES) / 65536;
@@ -148,11 +149,11 @@ static void gui_main() {
       display_fill_rectangle_dma_fast( v_column * VDI_LINES_WIDTH, 0, VDI_LINES_WIDTH, VDI_LINES_HEIGHT, VDI_FFT_COLOR );
       g_last_column_fft = v_column;
       // значение "сила отклика"
-      sprintf( g_str, "%u", v_len );
+      sprintf( g_str, "%d", v_len );
       display_write_string_with_bg( 0, VDI_LINES_HEIGHT*2, DISPLAY_WIDTH/2, 30, g_str, &font_25_30_font, DISPLAY_COLOR_GREEN, DISPLAY_COLOR_DARKGREEN );
     }
     printf(
-        "[%2d] x = %4d | y = %4d | r = %4d | d = %3d.%03d\n"
+        "[%2d] x=%4d|y=%4d|r=%4dd=%3d.%03d\n"
       , i
       , g_x[i] / 65536
       , g_y[i] / 65536
@@ -211,14 +212,15 @@ static void gui_main() {
   // считаем X и Y
   int v_X = ((sumX * 1024) / cnt) * 64;
   int v_Y = ((sumY * 1024) / cnt) * 64;
-  int v_d = full_atn( v_X, v_Y ) - v_tx_phase_deg;
+  int v_a = v_X;
+  int v_d = full_atn( &v_a, v_Y ) - v_tx_phase_deg;
   if ( v_d < 0 ) {
     v_d += 360 << 16;
   }
+  v_a /= 65536;
   //
-  unsigned int v_a = (unsigned int)(columnSqrt( (uint64_t)( ((((int64_t)v_X)*v_X) >> 16) + ((((int64_t)v_Y)*v_Y) >> 16) ) ) / 256);
   printf(
-      "X/Y: [%5d.%03d/%5d.%03d], r = %4u, d = %3d.%03d\n"
+      "X/Y: [%5d.%03d/%5d.%03d],r=%4u,d=%3d.%03d\n"
     , v_X / 65536, ((v_X & 0xFFFF) * 1000) / 65536
     , v_Y / 65536, ((v_Y & 0xFFFF) * 1000) / 65536
     , v_a
@@ -231,7 +233,7 @@ static void gui_main() {
   display_fill_rectangle_dma_fast( v_column * VDI_LINES_WIDTH, VDI_LINES_HEIGHT, VDI_LINES_WIDTH, VDI_LINES_HEIGHT, VDI_SD_COLOR );
   g_last_column_sd = v_column;
   // значение "сила отклика"
-  sprintf( g_str, "%u", v_a );
+  sprintf( g_str, "%d", v_a );
   display_write_string_with_bg( DISPLAY_WIDTH/2, VDI_LINES_HEIGHT*2, DISPLAY_WIDTH/2, 30, g_str, &font_25_30_font, DISPLAY_COLOR_RED, DISPLAY_COLOR_DARKRED );
   /*
   uint32_t v_time = g_milliseconds - v_start_ts;

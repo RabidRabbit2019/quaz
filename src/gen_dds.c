@@ -149,9 +149,6 @@ static volatile uint32_t g_level_tx = 0;
 static volatile uint32_t g_level_comp = 0;
 // уровень громкости звука [0...2048]
 static volatile uint32_t g_level_sound = 0;
-// начальная фаза генератора компенсации разбаланса
-// запоминается в настройках
-static uint32_t g_phase_comp_start = 0;
 // частота (сдвиг фазы генератора) TX и сигнала компенсации
 static uint32_t g_gen_freq = 0;
 // частота (сдвиг фазы генератора) звука
@@ -178,7 +175,7 @@ void gen_dds_init() {
   g_level_comp = v_profile->level_comp;
   g_level_sound = v_profile->level_sound;
   g_gen_freq = v_profile->gen_freq;
-  g_phase_comp_start = v_profile->phase_comp_start;
+  g_phase_comp = v_profile->phase_comp_start;
   // включаем выводы каналов CH1/PA8, CH2/PA9, CH3/PA11 таймера-1
   // alternate push-pull 2MHz
   GPIOA->CRH = (GPIOA->CRH & ~( GPIO_CRH_MODE8_Msk | GPIO_CRH_CNF8_Msk
@@ -191,16 +188,16 @@ void gen_dds_init() {
                ;
   // настраиваем таймер-1
   // тактируется от APB2 без делителя (72МГц), двунаправленный счётчик, APR=256, период 512 тактов
-  // ШИМ 8 битов. Update Event один раз за период, т.е. RCR=1
+  // ШИМ 8 битов (частота 72000000 / 512 = 140625). Update Event один раз за период, т.е. RCR=1
   // Output Trigger по включению таймера для одновременного запуска TIM3
   TIM1->PSC = 0; // без делителя
   TIM1->ARR = 256; // докуда считать
   TIM1->RCR = 1; // "делитель" частоты Update Event
   TIM1->CNT = 0; // на всяк случ сброс счётчика
   TIM1->CCR1 = g_cos_table[0]; // TX начинаем с нулевой фазы
-  // сигнал компенсации по фазе от g_phase_comp_start
+  // сигнал компенсации по фазе от g_phase_comp, может быть прочитано из профиля и != 0
   // 1024 отсчёта - период "синусоиды", 2^32 - период фазы генератора (DDS)
-  TIM1->CCR2 = g_cos_table[(1024ull * g_phase_comp_start) / 0x100000000ull];
+  TIM1->CCR2 = g_cos_table[g_phase_comp >> 22];
   TIM1->CCR3 = g_cos_table[0]; // звук, с нулевой фазы, тут пофик
   // режимы сравнения для трёх каналов
   TIM1->CCMR1 = TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1PE
@@ -221,8 +218,8 @@ void gen_dds_init() {
             ;
   TIM1->SR = 0;
   TIM1->DIER = TIM_DIER_UIE;
-  // настраиваем таймер-3 для пинания АЦП, тактирование 36 МГц, счёт вверх до 127 (0..127, 128 тактов)
-  // запуск синхронно со стартом TIM1
+  // настраиваем таймер-3 для пинания АЦП, тактирование 36 МГц (APB1 без делителя)
+  // счёт вверх до 127 (0..127, 128 тактов), запуск синхронно со стартом TIM1
   TIM3->PSC = 0;
   TIM3->CR1 = TIM_CR1_URS;
   TIM3->CR2 = TIM_CR2_MMS_1;
@@ -231,7 +228,7 @@ void gen_dds_init() {
   TIM3->SMCR = TIM_SMCR_SMS_1
              | TIM_SMCR_SMS_2
              ;
-  // запускаем TIM1
+  // запускаем TIM1 и TIM3
   TIM1->CR1 |= TIM_CR1_CEN;
   __NVIC_EnableIRQ( TIM1_UP_IRQn );
   // генерируем Update Event, чтобы в "теневые" регистры попали текущие значения

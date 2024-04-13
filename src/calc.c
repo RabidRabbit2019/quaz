@@ -89,14 +89,16 @@ static const int cordicAtnTable6_16[] = {
 
 // вычисление arctan(y/x)
 // аргументы в формате с фиксированной точкой 16.16
-// x должен быть больше, чем y; оба аргумента > 0
-int cordicArcTan( int x, int y )
+// xx должен быть больше, чем y; оба аргумента > 0
+// кроме угла в xx после вычислений будет длина вектора
+int cordicArcTan( int * xx, int y )
 {
 	//
 	int z = 0;
 	int sigma;
 	int x1, y1;
 	int i;
+  int x = *xx;
 
 	//
 	for ( i = 0; i < 22; i++ )
@@ -115,7 +117,9 @@ int cordicArcTan( int x, int y )
 		y = y1;
 
 	}
-	//
+	// длина вектора без учёта поправочного коэффициента
+  *xx = x;
+  // результат
 	return z;
 }
 
@@ -225,8 +229,11 @@ void BPF(int *x, int *y)
 }
 
 
-//
-int full_atn( int x, int y ) {
+// вычисляем арктангенс по полной окружности [0..360] градусов
+// после вычисления угла в xx лежит длина вектора (тоже в формате 16.16)
+int full_atn( int * xx, int y ) {
+  int x = *xx;
+  int v_result = 0;
   if ( 0 == x && 0 == y ) {
     return 0;
   }
@@ -234,15 +241,20 @@ int full_atn( int x, int y ) {
   int ay = y < 0 ? 0 - y : y;
   if ( ax > ay ) {
     if ( x > 0 ) {
-      return y < 0 ? 360 * 65536 - cordicArcTan( ax, ay ) : cordicArcTan( ax, ay );
+      v_result = y < 0 ? 360 * 65536 - cordicArcTan( &ax, ay ) : cordicArcTan( &ax, ay );
     } else {
-      return y < 0 ? 180 * 65536 + cordicArcTan( ax, ay ) : 180 * 65536 - cordicArcTan( ax, ay );
+      v_result = y < 0 ? 180 * 65536 + cordicArcTan( &ax, ay ) : 180 * 65536 - cordicArcTan( &ax, ay );
     }
+    // 39791/65536 ~= 1/1.647 (поправочный коэффициент)
+    *xx = (0 == ay) ? ax : (((int64_t)ax) * 39791) / 65536;
   } else {
     if ( y > 0 ) {
-      return x < 0 ? 90 * 65536 + cordicArcTan( ay, ax ) : 90 * 65536 - cordicArcTan( ay, ax );
+      v_result = x < 0 ? 90 * 65536 + cordicArcTan( &ay, ax ) : 90 * 65536 - cordicArcTan( &ay, ax );
     } else {
-      return x < 0 ? 270 * 65536 - cordicArcTan( ay, ax ) : 270 * 65536 + cordicArcTan( ay, ax );
+      v_result = x < 0 ? 270 * 65536 - cordicArcTan( &ay, ax ) : 270 * 65536 + cordicArcTan( &ay, ax );
     }
+    // 39791/65536 ~= 1/1.647 (поправочный коэффициент)
+    *xx = (0 == ax) ? ay : (((int64_t)ay) * 39791) / 65536;
   }
+  return v_result;
 }
