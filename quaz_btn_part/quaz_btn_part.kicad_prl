@@ -18,7 +18,7 @@
       "footprints": true,
       "graphics": true,
       "keepouts": true,
-      "lockedItems": false,
+      "lockedItems": true,
       "otherItems": true,
       "pads": true,
       "text": true,
@@ -62,11 +62,11 @@
       35,
       36
     ],
-    "visible_layers": "fffffff_7fffffff",
+    "visible_layers": "fffffff_ffffffff",
     "zone_display_mode": 0
   },
   "meta": {
-    "filename": "quaz_drv_part.kicad_prl",
+    "filename": "quaz_btn_part.kicad_prl",
     "version": 3
   },
   "project": {

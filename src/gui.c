@@ -19,6 +19,14 @@
 #define GUI_MODE_MAIN       0
 #define GUI_MODE_SETTINGS   1
 
+#define MAIN_ITEM_MIN       0
+#define MAIN_ITEM_BARRIER   0
+#define MAIN_ITEM_VOLUME    1
+#define MAIN_ITEM_FERRITE   2
+#define MAIN_ITEM_GROUND    3
+#define MAIN_ITEM_MAX       3
+
+
 static int g_gui_mode = GUI_MODE_MAIN;
 
 static int g_x[ADC_SAMPLES_COUNT], g_y[ADC_SAMPLES_COUNT];
@@ -33,11 +41,9 @@ static int g_main_item = 0;
 void delay_ms( uint32_t a_ms );
 
 
-void gui_init() {
+static void gui_items() {
   settings_t * v_settings = settings_get_current_profile();
   // здесь отрисовка статических элементов экрана
-  // чистим экран
-  display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_BYTE_COLOR_BLACK );
   // строка "Порог"
   display_write_string_with_bg(
         0, VDI_LINES_HEIGHT*2 + font_25_30_font.m_row_height
@@ -45,7 +51,7 @@ void gui_init() {
       , "Порог"
       , &font_25_30_font
       , DISPLAY_COLOR_WHITE
-      , DISPLAY_COLOR_DARKBLUE
+      , 0 == g_main_item ? DISPLAY_COLOR_BLUE : DISPLAY_COLOR_DARKBLUE
       );
   sprintf( g_str, "%u", (unsigned int)v_settings->barrier_level );
   display_write_string_with_bg(
@@ -63,7 +69,7 @@ void gui_init() {
       , "Громкость"
       , &font_25_30_font
       , DISPLAY_COLOR_WHITE
-      , DISPLAY_COLOR_DARKBLUE
+      , 1 == g_main_item ? DISPLAY_COLOR_BLUE : DISPLAY_COLOR_DARKBLUE
       );
   sprintf( g_str, "%u", (unsigned int)v_settings->level_sound );
   display_write_string_with_bg(
@@ -77,39 +83,28 @@ void gui_init() {
   // строка "Феррит"
   display_write_string_with_bg(
         0, VDI_LINES_HEIGHT*2 + (font_25_30_font.m_row_height * 3)
-      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
       , "Феррит"
       , &font_25_30_font
-      , DISPLAY_COLOR_GREEN
-      , DISPLAY_COLOR_DARKBLUE
-      );
-  sprintf( g_str, "%u", ((unsigned int)v_settings->ferrite_angle_fft) >> 16 );
-  display_write_string_with_bg(
-        DISPLAY_WIDTH*2/3, VDI_LINES_HEIGHT*2 + (font_25_30_font.m_row_height * 3)
-      , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
-      , g_str
-      , &font_25_30_font
       , DISPLAY_COLOR_WHITE
-      , DISPLAY_COLOR_DARKGRAY
+      , 2 == g_main_item ? DISPLAY_COLOR_MIDBLUE : DISPLAY_COLOR_DARKBLUE
       );
-  // строка "Феррит"
+  // строка "Грунт"
   display_write_string_with_bg(
         0, VDI_LINES_HEIGHT*2 + (font_25_30_font.m_row_height * 4)
-      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
-      , "Феррит"
-      , &font_25_30_font
-      , DISPLAY_COLOR_RED
-      , DISPLAY_COLOR_DARKBLUE
-      );
-  sprintf( g_str, "%u", ((unsigned int)v_settings->ferrite_angle_sd) >> 16 );
-  display_write_string_with_bg(
-        DISPLAY_WIDTH*2/3, VDI_LINES_HEIGHT*2 + (font_25_30_font.m_row_height * 4)
-      , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
-      , g_str
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , "Грунт"
       , &font_25_30_font
       , DISPLAY_COLOR_WHITE
-      , DISPLAY_COLOR_DARKGRAY
+      , 3 == g_main_item ? DISPLAY_COLOR_MIDBLUE : DISPLAY_COLOR_DARKBLUE
       );
+}
+
+void gui_init() {
+  // чистим экран
+  display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_BYTE_COLOR_BLACK );
+  // здесь отрисовка статических элементов экрана
+  gui_items();
 }
 
 
@@ -240,6 +235,25 @@ static void gui_main() {
   sprintf( g_str, "%u", (unsigned int)v_time );
   display_write_string_with_bg( 0, 64, 64, 30, g_str, &font_25_30_font, DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK );
   */
+  // кнопки
+  uint32_t v_changed = get_changed_buttons();
+  uint32_t v_buttons = get_buttons_state();
+  if ( 0 != v_changed ) {
+    if ( 0 != (v_changed & BT_UP_mask) && 0 == (v_buttons & BT_UP_mask) ) {
+      // нажата кнопка "вверх"
+      if ( --g_main_item < MAIN_ITEM_MIN ) {
+        g_main_item = MAIN_ITEM_MAX;
+      }
+      gui_items();
+    }
+    if ( 0 != (v_changed & BT_DOWN_mask) && 0 == (v_buttons & BT_DOWN_mask) ) {
+      // нажата кнопка "вниз"
+      if ( ++g_main_item > MAIN_ITEM_MAX ) {
+        g_main_item = MAIN_ITEM_MIN;
+      }
+      gui_items();
+    }
+  }
 }
 
 
