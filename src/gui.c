@@ -26,6 +26,9 @@
 #define MAIN_ITEM_GROUND    3
 #define MAIN_ITEM_MAX       3
 
+#define MAX_BARRIER_VALUE   999u
+#define MIN_BARRIER_VALUE   1u
+
 
 static int g_gui_mode = GUI_MODE_MAIN;
 
@@ -36,6 +39,36 @@ static int g_last_column_fft = 0;
 static int g_last_column_sd = 0;
 
 static int g_main_item = 0;
+
+
+static int g_menu_level = 0; // 0 - корневое меню
+static int g_menu_item = 0; // 0 - вернуться обратно
+
+static void mh_tx_gen();
+static void mh_rx_balance();
+static void mh_mask();
+static void mh_ferrite();
+static void mh_power();
+static void mh_save_profile();
+
+typedef void (*menu_item_handler_t)(void);
+
+typedef struct {
+  const char * name;
+  menu_item_handler_t handler;
+} menu_item_t;
+
+static const menu_item_t g_top_menu[] = {
+  {"..", NULL}
+, {"Раскачка TX", mh_tx_gen}
+, {"Баланс RX", mh_rx_balance}
+, {"Маска", mh_mask}
+, {"Калибровка", mh_ferrite}
+, {"Питание", mh_power}
+, {"Сохранить", mh_save_profile}
+};
+
+#define MENU_ITEM_MAX ((int)((sizeof(g_top_menu)/sizeof(g_top_menu[0]))-1))
 
 
 void delay_ms( uint32_t a_ms );
@@ -100,6 +133,23 @@ static void gui_items() {
       );
 }
 
+
+static void settings_items() {
+  for ( int i = 0; i < (int)(sizeof(g_top_menu)/sizeof(g_top_menu[0])); ++i ) {
+    display_write_string_with_bg(
+        0
+      , i * font_25_30_font.m_row_height
+      , DISPLAY_WIDTH
+      , font_25_30_font.m_row_height
+      , g_top_menu[i].name
+      , &font_25_30_font
+      , DISPLAY_COLOR_WHITE
+      , g_menu_item == i ? DISPLAY_COLOR_MIDBLUE : DISPLAY_COLOR_DARKGRAY
+      );
+  }
+}
+
+
 void gui_init() {
   // чистим экран
   display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_BYTE_COLOR_BLACK );
@@ -109,6 +159,7 @@ void gui_init() {
 
 
 static void gui_main() {
+  settings_t * v_settings = settings_get_current_profile();
   // индекс
   int fft_idx = (int)((64ull * get_tx_freq()) >> 32);
   int v_column = 0;
@@ -133,9 +184,11 @@ static void gui_main() {
   for ( int i = 0; i < 13; ++i ) {
     int v_len = g_x[i];
     int v_d = full_atn( &v_len, g_y[i] ) - v_tx_phase_deg;
+    /*
     if ( v_d < 0 ) {
       v_d += 360 << 16;
     }
+    */
     v_len /= 65536;
     if ( i == fft_idx ) {
       // показометр "VDI"
@@ -209,9 +262,12 @@ static void gui_main() {
   int v_Y = ((sumY * 1024) / cnt) * 64;
   int v_a = v_X;
   int v_d = full_atn( &v_a, v_Y ) - v_tx_phase_deg;
+  /*
   if ( v_d < 0 ) {
     v_d += 360 << 16;
   }
+  */
+  v_d = (360 << 16) - v_d;
   v_a /= 65536;
   //
   printf(
@@ -253,50 +309,108 @@ static void gui_main() {
       }
       gui_items();
     }
+    if ( 0 != (v_changed & BT_INC_mask) && 0 == (v_buttons & BT_INC_mask) ) {
+      // нажата кнопка +
+      switch ( g_main_item ) {
+        case MAIN_ITEM_BARRIER:
+          if ( ++v_settings->barrier_level > MAX_BARRIER_VALUE ) {
+            v_settings->barrier_level = MAX_BARRIER_VALUE;
+          } else {
+            gui_items();
+          }
+          break;
+          
+        case MAIN_ITEM_VOLUME:
+          if ( ++v_settings->level_sound > MAX_SOUND_VOLUME ) {
+            v_settings->level_sound = MAX_SOUND_VOLUME;
+          } else {
+            set_sound_volume( v_settings->level_sound );
+            gui_items();
+          }
+          break;
+          
+        case MAIN_ITEM_FERRITE:
+          break;
+          
+        case MAIN_ITEM_GROUND:
+          break;
+          
+        default:
+          break;
+      }
+    }
+    if ( 0 != (v_changed & BT_DEC_mask) && 0 == (v_buttons & BT_DEC_mask) ) {
+      // нажата кнопка -
+      switch ( g_main_item ) {
+        case MAIN_ITEM_BARRIER:
+          if ( --v_settings->barrier_level < MIN_BARRIER_VALUE ) {
+            v_settings->barrier_level = MIN_BARRIER_VALUE;
+          } else {
+            gui_items();
+          }
+          break;
+          
+        case MAIN_ITEM_VOLUME:
+          if ( --v_settings->level_sound < MIN_SOUND_VOLUME ) {
+            v_settings->level_sound = MIN_SOUND_VOLUME;
+          } else {
+            set_sound_volume( v_settings->level_sound );
+            gui_items();
+          }
+          break;
+          
+        case MAIN_ITEM_FERRITE:
+          break;
+          
+        case MAIN_ITEM_GROUND:
+          break;
+          
+        default:
+          break;
+      }
+    }
+    if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
+      // нажата кнопка "ОК/Меню"
+      // переключаемся в экран настроек
+      display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_BYTE_COLOR_BLACK );
+      settings_items();
+      g_gui_mode = GUI_MODE_SETTINGS;
+    }
   }
 }
 
 
-static int g_menu_level = 0; // 0 - корневое меню
-static int g_menu_item = 0; // 0 - вернуться обратно
-
-static void mh_tx_gen();
-static void mh_rx_balance();
-static void mh_mask();
-static void mh_ferrite();
-static void mh_power();
-static void mh_save_profile();
-
-typedef void (*menu_item_handler_t)(void);
-
-typedef struct {
-  const char * name;
-  menu_item_handler_t handler;
-} menu_item_t;
-
-static const menu_item_t g_top_menu[] = {
-  {"..", NULL}
-, {"Раскачка TX", mh_tx_gen}
-, {"Баланс RX", mh_rx_balance}
-, {"Маска", mh_mask}
-, {"Калибровка", mh_ferrite}
-, {"Питание", mh_power}
-, {"Сохранить", mh_save_profile}
-};
-
-
 static void gui_settings() {
-  for ( int i = 0; i < (int)(sizeof(g_top_menu)/sizeof(g_top_menu[0])); ++i ) {
-    display_write_string_with_bg(
-        0
-      , i * font_25_30_font.m_row_height
-      , DISPLAY_WIDTH
-      , font_25_30_font.m_row_height
-      , g_top_menu[i].name
-      , &font_25_30_font
-      , DISPLAY_COLOR_WHITE
-      , g_menu_item == i ? DISPLAY_COLOR_BLUE : DISPLAY_COLOR_DARKGRAY
-      );
+  //
+  if ( g_menu_level > 0 ) {
+    g_top_menu[g_menu_level].handler();
+  } else {
+    // кнопки
+    uint32_t v_changed = get_changed_buttons();
+    uint32_t v_buttons = get_buttons_state();
+    if ( 0 != v_changed ) {
+      if ( 0 != (v_changed & BT_UP_mask) && 0 == (v_buttons & BT_UP_mask) ) {
+        // нажата кнопка "вверх"
+        if ( --g_menu_item < 0 ) {
+          g_menu_item = MENU_ITEM_MAX;
+        }
+        settings_items();
+      }
+      if ( 0 != (v_changed & BT_DOWN_mask) && 0 == (v_buttons & BT_DOWN_mask) ) {
+        // нажата кнопка "вниз"
+        if ( ++g_menu_item > MENU_ITEM_MAX ) {
+          g_menu_item = 0;
+        }
+        settings_items();
+      }
+      if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
+        // нажата кнопка "ОК/Меню"
+        // переключаемся на главный экран
+        display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_BYTE_COLOR_BLACK );
+        gui_items();
+        g_gui_mode = GUI_MODE_MAIN;
+      }
+    }
   }
 }
 

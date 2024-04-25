@@ -1,3 +1,4 @@
+#include "gen_dds.h"
 #include "settings.h"
 #include "stm32f103x6.h"
 
@@ -159,9 +160,24 @@ uint32_t get_tx_phase() {
   return g_phase_tx;
 }
 
+
 uint32_t get_tx_freq() {
   return g_gen_freq;
 }
+
+
+// установить громкость звука
+void set_sound_volume( uint32_t a_volume ) {
+  if ( a_volume > MAX_SOUND_VOLUME ) {
+    a_volume = MAX_SOUND_VOLUME;
+  } else {
+    if ( a_volume < MIN_SOUND_VOLUME ) {
+      a_volume = MIN_SOUND_VOLUME;
+    }
+  }
+  g_level_sound = a_volume;
+}
+
 
 // настройка таймера-1
 // канал 1 - генерация "синуса" для TX
