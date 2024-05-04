@@ -44,29 +44,51 @@ static int g_main_item = 0;
 static int g_menu_level = 0; // 0 - корневое меню
 static int g_menu_item = 0; // 0 - вернуться обратно
 
+static void mi_tx_gen();
+static void mi_rx_balance();
+static void mi_mask();
+static void mi_ferrite();
+static void mi_power();
+static void mi_save_profile();
+static void mi_load_profile();
+
 static void mh_tx_gen();
 static void mh_rx_balance();
 static void mh_mask();
 static void mh_ferrite();
 static void mh_power();
 static void mh_save_profile();
+static void mh_load_profile();
 
+typedef void (*menu_item_init_t)(void);
 typedef void (*menu_item_handler_t)(void);
 
 typedef struct {
   const char * name;
+  menu_item_init_t init;
   menu_item_handler_t handler;
 } menu_item_t;
 
 static const menu_item_t g_top_menu[] = {
-  {"..", NULL}
-, {"Раскачка TX", mh_tx_gen}
-, {"Баланс RX", mh_rx_balance}
-, {"Маска", mh_mask}
-, {"Калибровка", mh_ferrite}
-, {"Питание", mh_power}
-, {"Сохранить", mh_save_profile}
+  {"..", NULL, NULL}
+, {"Раскачка TX", mi_tx_gen, mh_tx_gen}
+, {"Баланс RX", mi_rx_balance, mh_rx_balance}
+, {"Маска", mi_mask, mh_mask}
+, {"Калибровка", mi_ferrite, mh_ferrite}
+, {"Питание", mi_power, mh_power}
+, {"Сохранить", mi_save_profile, mh_save_profile}
+, {"Загрузить", mi_load_profile, mh_load_profile}
 };
+
+#define MENU_ITEM_BACK        0
+#define MENU_ITEM_TX_POWER    1
+#define MENU_ITEM_RX_BALANCE  2
+#define MENU_ITEM_MASK        3
+#define MENU_ITEM_FERRITE     4
+#define MENU_ITEM_BATTERY     5
+#define MENU_ITEM_SAVE        6
+#define MENU_ITEM_LOAD        7
+
 
 #define MENU_ITEM_MAX ((int)((sizeof(g_top_menu)/sizeof(g_top_menu[0]))-1))
 
@@ -158,10 +180,15 @@ void gui_init() {
 }
 
 
+static int get_fft_idx() {
+  return (int)(((64ull * get_tx_freq()) + 0x80000000ul) >> 32);
+}
+
+
 static void gui_main() {
   settings_t * v_settings = settings_get_current_profile();
   // индекс
-  int fft_idx = (int)((64ull * get_tx_freq()) >> 32);
+  int fft_idx = get_fft_idx();
   int v_column = 0;
   // ждём заполнения буфера
   bool v_last_flag = adc_buffer_flag();
@@ -181,27 +208,34 @@ static void gui_main() {
   // БПФ по данным от АЦП
   BPF( g_x, g_y );
   printf( "---- %3d.%03d ----\n", v_tx_phase_deg / 65536, ((v_tx_phase_deg & 0xFFFF) * 1000) / 65536 );
+  printf( "---- %u, %X ----\n", (unsigned int)v_tx_phase, (unsigned int)v_from );
   for ( int i = 0; i < 13; ++i ) {
     int v_len = g_x[i];
     int v_d = full_atn( &v_len, g_y[i] ) - v_tx_phase_deg;
-    /*
     if ( v_d < 0 ) {
-      v_d += 360 << 16;
+      v_d += 360 * 65536;
     }
-    */
     v_len /= 65536;
     if ( i == fft_idx ) {
       // показометр "VDI"
       v_column = (v_d / VDI_SECTOR_DEGREES) / 65536;
+      set_sound_freq_by_angle( ((uint32_t)v_column) * VDI_SECTOR_DEGREES );
       display_fill_rectangle_dma_fast( g_last_column_fft * VDI_LINES_WIDTH, 0, VDI_LINES_WIDTH, VDI_LINES_HEIGHT, 0 );
       display_fill_rectangle_dma_fast( v_column * VDI_LINES_WIDTH, 0, VDI_LINES_WIDTH, VDI_LINES_HEIGHT, VDI_FFT_COLOR );
       g_last_column_fft = v_column;
       // значение "сила отклика"
       sprintf( g_str, "%d", v_len );
-      display_write_string_with_bg( 0, VDI_LINES_HEIGHT*2, DISPLAY_WIDTH/2, 30, g_str, &font_25_30_font, DISPLAY_COLOR_GREEN, DISPLAY_COLOR_DARKGREEN );
+      display_write_string_with_bg(
+            0, VDI_LINES_HEIGHT*2
+          , DISPLAY_WIDTH/2, font_25_30_font.m_row_height
+          , g_str
+          , &font_25_30_font
+          , DISPLAY_COLOR_GREEN
+          , DISPLAY_COLOR_DARKGREEN
+          );
     }
     printf(
-        "[%2d] x=%4d|y=%4d|r=%4dd=%3d.%03d\n"
+        "[%2d] x=%4d|y=%4d|r=%4d|d=%3d.%03d\n"
       , i
       , g_x[i] / 65536
       , g_y[i] / 65536
@@ -262,16 +296,14 @@ static void gui_main() {
   int v_Y = ((sumY * 1024) / cnt) * 64;
   int v_a = v_X;
   int v_d = full_atn( &v_a, v_Y ) - v_tx_phase_deg;
-  /*
   if ( v_d < 0 ) {
-    v_d += 360 << 16;
+    v_d += 360 * 65536;
   }
-  */
-  v_d = (360 << 16) - v_d;
+  v_d = (360 * 65536) - v_d;
   v_a /= 65536;
   //
   printf(
-      "X/Y: [%5d.%03d/%5d.%03d],r=%4u,d=%3d.%03d\n"
+      "X/Y:[%d.%03d/%d.%03d],r=%4u,d=%d.%03d\n"
     , v_X / 65536, ((v_X & 0xFFFF) * 1000) / 65536
     , v_Y / 65536, ((v_Y & 0xFFFF) * 1000) / 65536
     , v_a
@@ -285,7 +317,14 @@ static void gui_main() {
   g_last_column_sd = v_column;
   // значение "сила отклика"
   sprintf( g_str, "%d", v_a );
-  display_write_string_with_bg( DISPLAY_WIDTH/2, VDI_LINES_HEIGHT*2, DISPLAY_WIDTH/2, 30, g_str, &font_25_30_font, DISPLAY_COLOR_RED, DISPLAY_COLOR_DARKRED );
+  display_write_string_with_bg(
+        DISPLAY_WIDTH/2, VDI_LINES_HEIGHT*2
+      , DISPLAY_WIDTH/2, font_25_30_font.m_row_height
+      , g_str
+      , &font_25_30_font
+      , DISPLAY_COLOR_RED
+      , DISPLAY_COLOR_DARKRED
+      );
   /*
   uint32_t v_time = g_milliseconds - v_start_ts;
   sprintf( g_str, "%u", (unsigned int)v_time );
@@ -382,7 +421,7 @@ static void gui_main() {
 
 static void gui_settings() {
   //
-  if ( g_menu_level > 0 ) {
+  if ( g_menu_level > MENU_ITEM_BACK ) {
     g_top_menu[g_menu_level].handler();
   } else {
     // кнопки
@@ -405,10 +444,19 @@ static void gui_settings() {
       }
       if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
         // нажата кнопка "ОК/Меню"
-        // переключаемся на главный экран
         display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_BYTE_COLOR_BLACK );
-        gui_items();
-        g_gui_mode = GUI_MODE_MAIN;
+        if ( MENU_ITEM_BACK == g_menu_item ) {
+          // переключаемся на главный экран
+          // подключаем канал IN3 АЦП
+          ADC1->SQR3 = 3 << ADC_SQR3_SQ1_Pos;
+          gui_items();
+          g_gui_mode = GUI_MODE_MAIN;
+        } else {
+          // переходим в выбранный пункт меню
+          g_menu_level = g_menu_item;
+          g_menu_item = 0;
+          g_top_menu[g_menu_level].init();
+        }
       }
     }
   }
@@ -432,7 +480,141 @@ void gui_process() {
 }
 
 
+static void mi_tx_gen() {
+  // подключаем канал IN1 АЦП
+  ADC1->SQR3 = 1 << ADC_SQR3_SQ1_Pos;
+  // здесь отрисовка статических элементов экрана
+  // строка заголовка
+  display_write_string_with_bg(
+        0, 0
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , g_top_menu[MENU_ITEM_TX_POWER].name
+      , &font_25_30_font
+      , DISPLAY_COLOR_YELLOW
+      , DISPLAY_COLOR_MIDBLUE
+      );
+  // ток в контуре
+  display_write_string_with_bg(
+        0, font_25_30_font.m_row_height
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "Ток, мА"
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , DISPLAY_COLOR_DARKBLUE
+      );
+  // уровень сигнала "накачки"
+  display_write_string_with_bg(
+        0, font_25_30_font.m_row_height*2
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "Уровень"
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , DISPLAY_COLOR_DARKBLUE
+      );
+}
+
+
+static void mi_rx_balance() {
+}
+
+
+static void mi_mask() {
+}
+
+
+static void mi_ferrite() {
+}
+
+
+static void mi_power() {
+}
+
+
+static void mi_save_profile() {
+}
+
+
+static void mi_load_profile() {
+}
+
+
+static void back_to_settings( int a_from_item ) {
+  g_menu_item = a_from_item;
+  g_menu_level = MENU_ITEM_BACK;
+  display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_BYTE_COLOR_BLACK );
+  settings_items();
+}
+
+
 static void mh_tx_gen() {
+  // индекс
+  int fft_idx = get_fft_idx();
+  // ждём заполнения буфера
+  bool v_last_flag = adc_buffer_flag();
+  while ( adc_buffer_flag() == v_last_flag ) {}
+  // быстренько получим адрес буфера
+  uint16_t * v_from = adc_get_buffer();
+  // копируем выборки в буфер
+  for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
+    g_x[i] = ((int)v_from[i]) << 16;
+    g_y[i] = 0;
+  }
+  // БПФ по данным от АЦП
+  BPF( g_x, g_y );
+  int v_len;
+  for ( int i = 0; i < 13; ++i ) {
+    v_len = g_x[i];
+    int v_d = full_atn( &v_len, g_y[i] );
+    v_len /= 65536;
+    printf(
+        "[%2d]%d x=%4d|y=%4d|r=%4d|d=%3d.%03d\n"
+      , i
+      , i == fft_idx ? 1 : 0
+      , g_x[i] / 65536
+      , g_y[i] / 65536
+      , v_len
+      , v_d / 65536, ((v_d & 0xFFFF) * 1000) / 65536
+      );
+  }
+  // значение "силы тока"
+  v_len = g_x[fft_idx];
+  full_atn( &v_len, g_y[fft_idx] );
+  sprintf( g_str, "%u", (unsigned int)((((uint64_t)v_len)*115852u) >> 32) );
+  display_write_string_with_bg(
+          DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+        , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+        , g_str
+        , &font_25_30_font
+        , DISPLAY_COLOR_WHITE
+        , DISPLAY_COLOR_DARKGRAY
+        );
+  // значение "уровня накачки"
+  sprintf( g_str, "%u", (unsigned int)get_tx_level() );
+  display_write_string_with_bg(
+          DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height*2
+        , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+        , g_str
+        , &font_25_30_font
+        , DISPLAY_COLOR_WHITE
+        , DISPLAY_COLOR_DARKGRAY
+        );
+  // кнопки
+  uint32_t v_changed = get_changed_buttons();
+  uint32_t v_buttons = get_buttons_state();
+  if ( 0 != v_changed ) {
+    if ( 0 != (v_changed & BT_INC_mask) && 0 == (v_buttons & BT_INC_mask) ) {
+      // нажата кнопка "+"
+      set_tx_level( get_tx_level() + 1u );
+    }
+    if ( 0 != (v_changed & BT_DEC_mask) && 0 == (v_buttons & BT_DEC_mask) ) {
+      // нажата кнопка "-"
+      set_tx_level( get_tx_level() - 1u );
+    }
+    if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
+      // нажата кнопка "OK"
+      back_to_settings( MENU_ITEM_TX_POWER );
+    }
+  }
 }
 
 
@@ -453,4 +635,8 @@ static void mh_power() {
 
 
 static void mh_save_profile() {
+}
+
+
+static void mh_load_profile() {
 }

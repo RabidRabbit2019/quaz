@@ -168,12 +168,13 @@ void settings_init() {
     // заполняем значениями по-умолчанию
     g_profiles[i].profile_id.id = i;
     g_profiles[i].profile_id.serial_num = (PROFILES_COUNT - 1) - i;
-    g_profiles[i].ferrite_angle_fft = 0;
-    g_profiles[i].ferrite_angle_sd = 0;
+    g_profiles[i].ferrite_angle = 0;
+    g_profiles[i].ground_angle = 0;
     g_profiles[i].gen_freq = 268435456u; // 140625 * 268435456 / (2^32) = 8789.0625 Гц
+    //g_profiles[i].gen_freq = 267435456u; // 140625 * 267435456 / (2^32) ~= 8756.32 Гц
     g_profiles[i].level_comp = 100;
     g_profiles[i].level_sound = 500;
-    g_profiles[i].level_tx = 600;
+    g_profiles[i].level_tx = 300;
     g_profiles[i].mask_width = 16;
     g_profiles[i].barrier_level = 99;
     g_profiles[i].phase_comp_start = 0;
@@ -183,6 +184,7 @@ void settings_init() {
     // считаем CRC32
     g_profiles[i].crc32 = crc32( &g_profiles[i] );
   }
+  /*
   // последний килобайт флэша отдаём под хранение профилей.
   // пытаемся прочесть профили, активным будет профиль с максимальным serial_num
   bool v_profile_loaded = false;
@@ -217,4 +219,5 @@ void settings_init() {
       g_current_profile = 0;
     }
   }
+  */
 }

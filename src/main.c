@@ -127,6 +127,6 @@ void run() {
     } else {
       GPIOC->BSRR = GPIO_BSRR_BR13;
     }
-    //delay_ms( 1000u );
+    delay_ms( 503u );
   }
 }

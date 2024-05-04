@@ -4,7 +4,7 @@
 
 #define BT_COUNT     5
 
-#define BT_IGNORE_INTERVAL_MS   125u
+#define BT_IGNORE_INTERVAL_MS   250u
 
 static uint32_t g_buttons = 0;
 static uint32_t g_buttons_change = 0;

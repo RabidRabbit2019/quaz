@@ -166,6 +166,28 @@ uint32_t get_tx_freq() {
 }
 
 
+void set_sound_freq_by_angle( uint32_t a_angle ) {
+  g_sound_freq = 512u + (uint32_t)( ((((uint64_t)a_angle) * 10) << 32) / BASE_PWM_FREQ );
+}
+
+
+uint32_t get_tx_level() {
+  return g_level_tx;
+}
+
+
+void set_tx_level( uint32_t a_level ) {
+  if ( a_level > MAX_TX_LEVEL ) {
+    a_level = MAX_TX_LEVEL;
+  } else {
+    if ( a_level < MIN_TX_LEVEL ) {
+      a_level = MIN_TX_LEVEL;
+    }
+  }
+  g_level_tx = a_level;
+}
+
+
 // установить громкость звука
 void set_sound_volume( uint32_t a_volume ) {
   if ( a_volume > MAX_SOUND_VOLUME ) {
