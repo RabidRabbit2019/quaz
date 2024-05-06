@@ -4,7 +4,7 @@
 
 #define BT_COUNT     5
 
-#define BT_IGNORE_INTERVAL_MS   400u
+#define BT_IGNORE_INTERVAL_MS   250u
 #define BT_AUTOREPEAT_WAIT      1000u
 #define BT_AUTOREPEAT_INTERVAL  100u
 
@@ -84,6 +84,10 @@ void buttons_scan() {
   g_buttons = (g_buttons & v_ignore_mask) | (v_buttons & ~v_ignore_mask);
   // кнопки с изменившимся состоянием будем "игнорить"
   for ( int i = 0; i < BT_COUNT; ++i ) {
+    if ( 0 != (v_ignore_mask & g_buttons_masks[i]) ) {
+      // заигноренные кнопки пропускаем
+      continue;
+    }
     if ( 0 != (g_buttons_change & g_buttons_masks[i]) ) {
       g_buttons_wait_ms[i] = v_now;
       if ( 0 != (g_buttons & g_buttons_masks[i]) ) {

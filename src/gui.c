@@ -40,9 +40,10 @@ static int g_last_column_sd = 0;
 
 static int g_main_item = 0;
 
-
 static int g_menu_level = 0; // 0 - корневое меню
 static int g_menu_item = 0; // 0 - вернуться обратно
+
+static int g_tmp = 0;
 
 static void mi_tx_gen();
 static void mi_rx_balance();
@@ -483,6 +484,8 @@ void gui_process() {
 
 
 static void mi_tx_gen() {
+  // для получения первого значения
+  g_tmp = -1;
   // подключаем канал IN1 АЦП
   ADC1->SQR3 = 1 << ADC_SQR3_SQ1_Pos;
   // здесь отрисовка статических элементов экрана
@@ -566,9 +569,6 @@ static void rx_balance_init_screen() {
 }
 
 
-static int g_rx_len = 0;
-
-
 static void mi_rx_balance() {
   rx_balance_init_screen();
   // индекс
@@ -585,7 +585,7 @@ static void mi_rx_balance() {
   }
   // БПФ по данным от АЦП
   BPF( g_x, g_y );
-  g_rx_len = g_x[fft_idx];
+  g_tmp = g_x[fft_idx];
 }
 
 
@@ -650,7 +650,12 @@ static void mh_tx_gen() {
   // значение "силы тока"
   v_len = g_x[fft_idx];
   full_atn( &v_len, g_y[fft_idx] );
-  sprintf( g_str, "%u", (unsigned int)((((uint64_t)v_len)*115852u) >> 32) );
+  if ( -1 == g_tmp ) {
+    g_tmp = v_len;
+  } else {
+    g_tmp = (v_len / 8) + ((g_tmp * 7) / 8);
+  }
+  sprintf( g_str, "%u", (unsigned int)((((uint64_t)g_tmp)*115852u) >> 32) );
   display_write_string_with_bg(
           DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
         , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
@@ -714,8 +719,8 @@ static void mh_rx_balance() {
     v_d += 360 * 65536;
   }
   // значение "длины вектора"
-  g_rx_len = (v_len / 8) + (g_rx_len * 7) / 8;
-  sprintf( g_str, "%d.%d", g_rx_len / 65536, ((g_rx_len & 0xFFFF) * 10) / 65536 );
+  g_tmp = (v_len / 8) + (g_tmp * 7) / 8;
+  sprintf( g_str, "%d.%d", g_tmp / 65536, ((g_tmp & 0xFFFF) * 10) / 65536 );
   display_write_string_with_bg(
           DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
         , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
@@ -818,7 +823,7 @@ static void mh_rx_balance() {
     }
     if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
       // нажата кнопка "OK"
-      back_to_settings( MENU_ITEM_TX_POWER );
+      back_to_settings( MENU_ITEM_RX_BALANCE );
     }
   }
 }
