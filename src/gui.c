@@ -181,7 +181,7 @@ void gui_init() {
 
 
 static int get_fft_idx() {
-  return (int)(((64ull * get_tx_freq()) + 0x80000000ul) >> 32);
+  return (int)(((((uint64_t)ADC_SAMPLES_COUNT/2) * get_tx_freq()) + 0x80000000ul) >> 32);
 }
 
 
@@ -259,7 +259,7 @@ static void gui_main() {
   // т.к. нам надо рассматривать только целое количество периодов
   // отсюда граничение по минимальной частоте, в окно выборки АЦП должен целиком
   // уместиться хотя бы один период сигнала, т.е. g_gen_freq >= 67108864 (2197.265625 Гц)
-  uint64_t samplePhaseEdge = (((64ull * get_tx_freq()) >> 32) << 32) + samplePhase;
+  uint64_t samplePhaseEdge = (((((uint64_t)ADC_SAMPLES_COUNT/2) * get_tx_freq()) >> 32) << 32) + samplePhase;
   //
   for ( int i = 0; i < ADC_SAMPLES_COUNT && samplePhase < samplePhaseEdge; ++i ) {
     //
@@ -414,6 +414,7 @@ static void gui_main() {
       display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_BYTE_COLOR_BLACK );
       settings_items();
       g_gui_mode = GUI_MODE_SETTINGS;
+      set_sound_volume( 0 );
     }
   }
 }
@@ -451,6 +452,7 @@ static void gui_settings() {
           ADC1->SQR3 = 3 << ADC_SQR3_SQ1_Pos;
           gui_items();
           g_gui_mode = GUI_MODE_MAIN;
+          set_sound_volume( settings_get_current_profile()->level_sound );
         } else {
           // переходим в выбранный пункт меню
           g_menu_level = g_menu_item;
@@ -514,7 +516,76 @@ static void mi_tx_gen() {
 }
 
 
+static void rx_balance_init_screen() {
+  // здесь отрисовка статических элементов экрана
+  // строка заголовка
+  display_write_string_with_bg(
+        0, 0
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , g_top_menu[MENU_ITEM_RX_BALANCE].name
+      , &font_25_30_font
+      , DISPLAY_COLOR_YELLOW
+      , DISPLAY_COLOR_MIDBLUE
+      );
+  // сигнал RX - длина вектора
+  display_write_string_with_bg(
+        0, font_25_30_font.m_row_height
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "RX длина"
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , DISPLAY_COLOR_DARKBLUE
+      );
+  // сигнал RX - угол вектора
+  display_write_string_with_bg(
+        0, font_25_30_font.m_row_height*2
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "RX угол"
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , DISPLAY_COLOR_DARKBLUE
+      );
+  // компенсирующий сигнал - уровень
+  display_write_string_with_bg(
+        0, font_25_30_font.m_row_height*3
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "CM уровень"
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , 0 == g_menu_item ? DISPLAY_COLOR_MIDBLUE : DISPLAY_COLOR_DARKBLUE
+      );
+  // компенсирующий сигнал - начальная фаза
+  display_write_string_with_bg(
+        0, font_25_30_font.m_row_height*4
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "CM фаза"
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , 1 == g_menu_item ? DISPLAY_COLOR_MIDBLUE : DISPLAY_COLOR_DARKBLUE
+      );
+}
+
+
+static int g_rx_len = 0;
+
+
 static void mi_rx_balance() {
+  rx_balance_init_screen();
+  // индекс
+  int fft_idx = get_fft_idx();
+  // ждём заполнения буфера
+  bool v_last_flag = adc_buffer_flag();
+  while ( adc_buffer_flag() == v_last_flag ) {}
+  // быстренько получим адрес буфера
+  uint16_t * v_from = adc_get_buffer();
+  // копируем выборки в буфер
+  for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
+    g_x[i] = ((int)v_from[i]) << 16;
+    g_y[i] = 0;
+  }
+  // БПФ по данным от АЦП
+  BPF( g_x, g_y );
+  g_rx_len = g_x[fft_idx];
 }
 
 
@@ -619,6 +690,137 @@ static void mh_tx_gen() {
 
 
 static void mh_rx_balance() {
+  settings_t * v_settings = settings_get_current_profile();
+  // индекс
+  int fft_idx = get_fft_idx();
+  // ждём заполнения буфера
+  bool v_last_flag = adc_buffer_flag();
+  while ( adc_buffer_flag() == v_last_flag ) {}
+  // быстренько получим адрес буфера
+  uint16_t * v_from = adc_get_buffer();
+  uint32_t v_tx_phase = adc_get_tx_phase();
+  // копируем выборки в буфер
+  for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
+    g_x[i] = ((int)v_from[i]) << 16;
+    g_y[i] = 0;
+  }
+  // вычисляем фазу в градусах
+  int v_tx_phase_deg = (int)(((360ull << 16) * v_tx_phase) / 0x100000000ull);
+  // БПФ по данным от АЦП
+  BPF( g_x, g_y );
+  int v_len = g_x[fft_idx];
+  int v_d = full_atn( &v_len, g_y[fft_idx] ) - v_tx_phase_deg;
+  if ( v_d < 0 ) {
+    v_d += 360 * 65536;
+  }
+  // значение "длины вектора"
+  g_rx_len = (v_len / 8) + (g_rx_len * 7) / 8;
+  sprintf( g_str, "%d.%d", g_rx_len / 65536, ((g_rx_len & 0xFFFF) * 10) / 65536 );
+  display_write_string_with_bg(
+          DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+        , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+        , g_str
+        , &font_25_30_font
+        , DISPLAY_COLOR_WHITE
+        , DISPLAY_COLOR_DARKGRAY
+        );
+  // значение "угла вектора"
+  sprintf( g_str, "%d.%d", v_d / 65536, ((v_d & 0xFFFF) * 10) / 65536 );
+  display_write_string_with_bg(
+          DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height * 2
+        , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+        , g_str
+        , &font_25_30_font
+        , DISPLAY_COLOR_WHITE
+        , DISPLAY_COLOR_DARKGRAY
+        );
+  // значение "уровня сигнала компенсации"
+  sprintf( g_str, "%u", (unsigned int)get_cm_level() );
+  display_write_string_with_bg(
+          DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height * 3
+        , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+        , g_str
+        , &font_25_30_font
+        , DISPLAY_COLOR_WHITE
+        , DISPLAY_COLOR_DARKGRAY
+        );
+  // значение "фазы сигнала компенсации"
+  unsigned int v_cmp_phase_deg = (unsigned int)(((360ull << 16) * v_settings->phase_comp_start) / 0x100000000ull);
+  sprintf( g_str, "%u.%u", v_cmp_phase_deg >> 16, ((v_cmp_phase_deg & 0xFFFF) * 10u) >> 16 );
+  display_write_string_with_bg(
+          DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height * 4
+        , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+        , g_str
+        , &font_25_30_font
+        , DISPLAY_COLOR_WHITE
+        , DISPLAY_COLOR_DARKGRAY
+        );
+  // кнопки
+  uint32_t v_changed = get_changed_buttons();
+  uint32_t v_buttons = get_buttons_state();
+  if ( 0 != v_changed ) {
+    if ( 0 != (v_changed & BT_INC_mask) && 0 == (v_buttons & BT_INC_mask) ) {
+      // нажата кнопка "+"
+      if ( 0 == g_menu_item ) {
+        // увеличиваем уровень сигнала компенсации
+        set_cm_level( get_cm_level() + 1u );
+      } else {
+        uint64_t v_cm_phase_start = v_settings->phase_comp_start;
+        // увеличиваем начальную фазу сигнала компенсации
+        if ( v_cm_phase_start < 0x100000000ull ) {
+          // прибавляем одну десятую градуса
+          v_cm_phase_start += 1193046u; // 0x100000000 / 3600
+          // за 360 градусов не вылезаем
+          if ( v_cm_phase_start >= 0x100000000ull ) {
+            v_cm_phase_start = 0xFFFFFFFFul;
+          }
+        }
+        // меняем фазу генератора
+        if ( ((uint32_t)v_cm_phase_start) != v_settings->phase_comp_start ) {
+          set_cm_phase( ((uint32_t)v_cm_phase_start) - v_settings->phase_comp_start );
+          v_settings->phase_comp_start = ((uint32_t)v_cm_phase_start);
+        }
+      }
+    }
+    if ( 0 != (v_changed & BT_DEC_mask) && 0 == (v_buttons & BT_DEC_mask) ) {
+      // нажата кнопка "-"
+      if ( 0 == g_menu_item ) {
+        // увеличиваем уровень сигнала компенсации
+        set_cm_level( get_cm_level() - 1u );
+      } else {
+        uint32_t v_cm_phase_start = v_settings->phase_comp_start;
+        // уменьшаем начальную фазу сигнала компенсации
+        if ( v_cm_phase_start >= 1193046u ) {
+          // убавляем одну десятую градуса
+          v_cm_phase_start -= 1193046u; // 0x100000000 / 3600
+        } else {
+          // меньше нуля не делаем
+          v_cm_phase_start = 0;
+        }
+        // меняем фазу генератора
+        if ( v_cm_phase_start != v_settings->phase_comp_start ) {
+          set_cm_phase( v_cm_phase_start - v_settings->phase_comp_start );
+          v_settings->phase_comp_start = v_cm_phase_start;
+        }
+      }
+    }
+    if ( 0 != (v_changed & BT_UP_mask) && 0 == (v_buttons & BT_UP_mask) ) {
+      // нажата кнопка "вверх"
+      g_menu_item ^= 1;
+      // перерисуем вид экрана
+      rx_balance_init_screen();
+    }
+    if ( 0 != (v_changed & BT_DOWN_mask) && 0 == (v_buttons & BT_DOWN_mask) ) {
+      // нажата кнопка "вниз"
+      g_menu_item ^= 1;
+      // перерисуем вид экрана
+      rx_balance_init_screen();
+    }
+    if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
+      // нажата кнопка "OK"
+      back_to_settings( MENU_ITEM_TX_POWER );
+    }
+  }
 }
 
 

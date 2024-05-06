@@ -171,8 +171,7 @@ void settings_init() {
     g_profiles[i].ferrite_angle = 0;
     g_profiles[i].ground_angle = 0;
     g_profiles[i].gen_freq = 268435456u; // 140625 * 268435456 / (2^32) = 8789.0625 Гц
-    //g_profiles[i].gen_freq = 267435456u; // 140625 * 267435456 / (2^32) ~= 8756.32 Гц
-    g_profiles[i].level_comp = 100;
+    g_profiles[i].level_comp = 1;
     g_profiles[i].level_sound = 500;
     g_profiles[i].level_tx = 300;
     g_profiles[i].mask_width = 16;

@@ -4,7 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define ADC_SAMPLES_COUNT   128
+// #define ADC_SAMPLES_COUNT   128
+#define ADC_SAMPLES_COUNT   256
 
 void adc_init();
 

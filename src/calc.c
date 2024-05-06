@@ -1,5 +1,6 @@
 #include <stdint.h>
 
+#define BPF_BASE  256
 
 // вычисление квадратного корня
 uint64_t columnSqrt( uint64_t arg )
@@ -125,7 +126,8 @@ int cordicArcTan( int * xx, int y )
 
 
 static const int bpfCos[] = {
-    65457  // 2.8125
+    65516  // 1.40625
+  , 65457  // 2.8125
   , 65220  // 5.625
 	, 64277  // 11.25
 	, 60547  // 22.5
@@ -135,7 +137,8 @@ static const int bpfCos[] = {
 };
 
 static const int bpfSin[] = {
-     -3216
+     -1608
+  ,  -3216
 	,  -6423
 	, -12784
 	, -25079
@@ -157,9 +160,9 @@ void BPF(int *x, int *y)
 	int c,s,t1,t2,t3,t4,u1,u2,u3;
 	int i,j,p,l,L,M,M1,K, III = 0;
 
-	L = 128;
-	M = 64;
-	M1 = 127;
+	L = BPF_BASE;
+	M = BPF_BASE/2;
+	M1 = BPF_BASE-1;
 
 	while ( L >= 2 )
 	{
@@ -174,7 +177,7 @@ void BPF(int *x, int *y)
 		//
 		for ( j = 0; j < l; j++ )
 		{
-			for ( i = j; i < 128; i += L )
+			for ( i = j; i < BPF_BASE; i += L )
 			{
 				p = i + l;
 				t1 = x[i] + x[p];
@@ -193,7 +196,7 @@ void BPF(int *x, int *y)
 		//
 		if ( l > 1 )
 		{
-			for ( i = 0; i < 128; i++ )
+			for ( i = 0; i < BPF_BASE; i++ )
 			{
 				//
 				x[i] /= 2;

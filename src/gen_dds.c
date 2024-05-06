@@ -141,14 +141,14 @@ static const uint8_t g_cos_table[1024] = {
 // текущая фаза генератора TX
 static uint32_t g_phase_tx = 0;
 // текущая фаза генератора компенсации разбаланса
-static uint32_t g_phase_comp = 0;
+static volatile uint32_t g_phase_comp = 0;
 // текущая фаза генератора звука
 static uint32_t g_phase_sound = 0;
-// уровень выходного сигнала TX [0..2048]
+// уровень выходного сигнала TX [0..256]
 static volatile uint32_t g_level_tx = 0;
-// уровень выходного сигнала компенсации разбаланса [0..2048]
+// уровень выходного сигнала компенсации разбаланса [0..256]
 static volatile uint32_t g_level_comp = 0;
-// уровень громкости звука [0...2048]
+// уровень громкости звука [0...256]
 static volatile uint32_t g_level_sound = 0;
 // частота (сдвиг фазы генератора) TX и сигнала компенсации
 static uint32_t g_gen_freq = 0;
@@ -176,6 +176,11 @@ uint32_t get_tx_level() {
 }
 
 
+uint32_t get_cm_level() {
+  return g_level_comp;
+}
+
+
 void set_tx_level( uint32_t a_level ) {
   if ( a_level > MAX_TX_LEVEL ) {
     a_level = MAX_TX_LEVEL;
@@ -185,6 +190,18 @@ void set_tx_level( uint32_t a_level ) {
     }
   }
   g_level_tx = a_level;
+}
+
+
+void set_cm_level( uint32_t a_level ) {
+  if ( a_level > MAX_TX_LEVEL ) {
+    a_level = MAX_TX_LEVEL;
+  } else {
+    if ( a_level < MIN_TX_LEVEL ) {
+      a_level = MIN_TX_LEVEL;
+    }
+  }
+  g_level_comp = a_level;
 }
 
 
@@ -198,6 +215,17 @@ void set_sound_volume( uint32_t a_volume ) {
     }
   }
   g_level_sound = a_volume;
+}
+
+
+// изменить текущую фазу сигнала компенсации
+void set_cm_phase( uint32_t a_phase_diff ) {
+  // запоминаем текущую фазу генератора
+  uint32_t v_phase = g_phase_comp;
+  // ждём изменения фазы генератора (сгенерирован очередной отсчёт)
+  while ( v_phase == g_phase_comp ) {}
+  // меняем фазу генератора между отсчётами
+  g_phase_comp += a_phase_diff;
 }
 
 
