@@ -1,0 +1,3 @@
+(fp_lib_table
+  (lib (name "quaz_btn_part")(type "KiCad")(uri "/home/vzaytsev/work/github/quaz/quaz_btn_part.pretty")(options "")(descr ""))
+)

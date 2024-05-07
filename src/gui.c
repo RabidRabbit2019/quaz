@@ -555,7 +555,7 @@ static void rx_balance_init_screen() {
       , "CM уровень"
       , &font_25_30_font
       , DISPLAY_COLOR_CYAN
-      , 0 == g_menu_item ? DISPLAY_COLOR_MIDBLUE : DISPLAY_COLOR_DARKBLUE
+      , 0 == g_menu_item ? DISPLAY_COLOR_BLUE : DISPLAY_COLOR_DARKBLUE
       );
   // компенсирующий сигнал - начальная фаза
   display_write_string_with_bg(
@@ -564,28 +564,15 @@ static void rx_balance_init_screen() {
       , "CM фаза"
       , &font_25_30_font
       , DISPLAY_COLOR_CYAN
-      , 1 == g_menu_item ? DISPLAY_COLOR_MIDBLUE : DISPLAY_COLOR_DARKBLUE
+      , 1 == g_menu_item ? DISPLAY_COLOR_BLUE : DISPLAY_COLOR_DARKBLUE
       );
 }
 
 
 static void mi_rx_balance() {
   rx_balance_init_screen();
-  // индекс
-  int fft_idx = get_fft_idx();
-  // ждём заполнения буфера
-  bool v_last_flag = adc_buffer_flag();
-  while ( adc_buffer_flag() == v_last_flag ) {}
-  // быстренько получим адрес буфера
-  uint16_t * v_from = adc_get_buffer();
-  // копируем выборки в буфер
-  for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
-    g_x[i] = ((int)v_from[i]) << 16;
-    g_y[i] = 0;
-  }
-  // БПФ по данным от АЦП
-  BPF( g_x, g_y );
-  g_tmp = g_x[fft_idx];
+  // для получения первого значения
+  g_tmp = -1;
 }
 
 
@@ -653,8 +640,9 @@ static void mh_tx_gen() {
   if ( -1 == g_tmp ) {
     g_tmp = v_len;
   } else {
-    g_tmp = (v_len / 8) + ((g_tmp * 7) / 8);
+    g_tmp = (v_len / 16) + ((g_tmp * 15) / 16);
   }
+  // с учётом номиналом элементов схемы
   sprintf( g_str, "%u", (unsigned int)((((uint64_t)g_tmp)*115852u) >> 32) );
   display_write_string_with_bg(
           DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
@@ -719,7 +707,11 @@ static void mh_rx_balance() {
     v_d += 360 * 65536;
   }
   // значение "длины вектора"
-  g_tmp = (v_len / 8) + (g_tmp * 7) / 8;
+  if ( -1 == g_tmp ) {
+    g_tmp = v_len;
+  } else {
+    g_tmp = (v_len / 16) + (g_tmp * 15) / 16;
+  }
   sprintf( g_str, "%d.%d", g_tmp / 65536, ((g_tmp & 0xFFFF) * 10) / 65536 );
   display_write_string_with_bg(
           DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
@@ -773,8 +765,8 @@ static void mh_rx_balance() {
         uint64_t v_cm_phase_start = v_settings->phase_comp_start;
         // увеличиваем начальную фазу сигнала компенсации
         if ( v_cm_phase_start < 0x100000000ull ) {
-          // прибавляем одну десятую градуса
-          v_cm_phase_start += 1193046u; // 0x100000000 / 3600
+          // прибавляем одну десятую градуса на одиночное нажатие и по одному градусу на автоповтор
+          v_cm_phase_start += is_repeated(BT_INC_mask) ? 11930464u : 1193046u; // 0x100000000 / 360(0)
           // за 360 градусов не вылезаем
           if ( v_cm_phase_start >= 0x100000000ull ) {
             v_cm_phase_start = 0xFFFFFFFFul;
@@ -793,19 +785,18 @@ static void mh_rx_balance() {
         // увеличиваем уровень сигнала компенсации
         set_cm_level( get_cm_level() - 1u );
       } else {
-        uint32_t v_cm_phase_start = v_settings->phase_comp_start;
+        int64_t v_cm_phase_start = v_settings->phase_comp_start;
         // уменьшаем начальную фазу сигнала компенсации
-        if ( v_cm_phase_start >= 1193046u ) {
-          // убавляем одну десятую градуса
-          v_cm_phase_start -= 1193046u; // 0x100000000 / 3600
-        } else {
+        // убавляем одну десятую градуса на одиночное нажатие и по одному градусу на автоповтор
+        v_cm_phase_start -= is_repeated(BT_INC_mask) ? 11930464 : 1193046; // 0x100000000 / 360(0)
+        if ( v_cm_phase_start < 0 ) {
           // меньше нуля не делаем
           v_cm_phase_start = 0;
         }
         // меняем фазу генератора
-        if ( v_cm_phase_start != v_settings->phase_comp_start ) {
-          set_cm_phase( v_cm_phase_start - v_settings->phase_comp_start );
-          v_settings->phase_comp_start = v_cm_phase_start;
+        if ( ((uint32_t)v_cm_phase_start) != v_settings->phase_comp_start ) {
+          set_cm_phase( ((uint32_t)v_cm_phase_start) - v_settings->phase_comp_start );
+          v_settings->phase_comp_start = (uint32_t)v_cm_phase_start;
         }
       }
     }

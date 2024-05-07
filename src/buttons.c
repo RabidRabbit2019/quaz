@@ -4,8 +4,11 @@
 
 #define BT_COUNT     5
 
+// после изменения состояния кнопки другие изменения состояния игнорируются на это время, мс
 #define BT_IGNORE_INTERVAL_MS   250u
+// интервал запуска автоповтора нажатия при длительном нажатии на кнопку, мс
 #define BT_AUTOREPEAT_WAIT      1000u
+// интервал между "автоматическими" нажатиями на кнопку
 #define BT_AUTOREPEAT_INTERVAL  100u
 
 
@@ -28,16 +31,19 @@ extern volatile uint32_t g_milliseconds;
 void delay_ms( uint32_t a_ms );
 
 
+// получить маску кнопок с изменившимся состоянием (1 - состояние изменилось)
 uint32_t get_changed_buttons() {
   return g_buttons_change;
 }
 
 
+// получить маску состояния кнопок (0 - нажата)
 uint32_t get_buttons_state() {
   return g_buttons;
 }
 
 
+// начальные настройки
 void buttons_init() {
   // PB12..PB15 входы с подтяжкой к питанию
   GPIOB->CRH = (GPIOC->CRH & ~( GPIO_CRH_MODE11 | GPIO_CRH_CNF11
@@ -65,6 +71,7 @@ void buttons_init() {
 }
 
 
+// сканирование состояния кнопок
 void buttons_scan() {
   uint32_t v_buttons = GPIOB->IDR;
   uint32_t v_now = g_milliseconds;
@@ -82,13 +89,14 @@ void buttons_scan() {
   g_buttons_change &= ~v_ignore_mask;
   // перепишем только состояние кнопок, которые не в игноре
   g_buttons = (g_buttons & v_ignore_mask) | (v_buttons & ~v_ignore_mask);
-  // кнопки с изменившимся состоянием будем "игнорить"
+  // обработка всех кнопок
   for ( int i = 0; i < BT_COUNT; ++i ) {
     if ( 0 != (v_ignore_mask & g_buttons_masks[i]) ) {
       // заигноренные кнопки пропускаем
       continue;
     }
     if ( 0 != (g_buttons_change & g_buttons_masks[i]) ) {
+      // кнопка изменила состояние, зарядим интервал игнора
       g_buttons_wait_ms[i] = v_now;
       if ( 0 != (g_buttons & g_buttons_masks[i]) ) {
         // если кнопка была отпущена, снимаем флаг автоповтора
@@ -98,6 +106,7 @@ void buttons_scan() {
         g_repeat_wait[i] = v_now;
       }
     } else {
+      // кнопка не меняла состояние, поддерживаем интервал игнора, чтоб в следующий раз не игнорировать
       g_buttons_wait_ms[i] = v_now - BT_IGNORE_INTERVAL_MS;
       // состояние кнопки не изменилось, если прошло достаточно времени, запустим автоповтор
       if ( 0 == (g_buttons & g_buttons_masks[i]) ) {
@@ -124,4 +133,9 @@ void buttons_scan() {
       }
     }
   }
+}
+
+
+bool is_repeated( unsigned int a_button_mask ) {
+  return 0 != (g_repeat_flag & a_button_mask);
 }
