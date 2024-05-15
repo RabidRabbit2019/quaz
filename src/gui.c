@@ -44,6 +44,7 @@ static int g_menu_level = 0; // 0 - корневое меню
 static int g_menu_item = 0; // 0 - вернуться обратно
 
 static int g_tmp = 0;
+static settings_t * g_profiles_ptr[PROFILES_COUNT]; // адреса сохранённых профилей, NULL - профиль отсутствует
 
 static void mi_tx_gen();
 static void mi_rx_balance();
@@ -210,40 +211,36 @@ static void gui_main() {
   BPF( g_x, g_y );
   printf( "---- %3d.%03d ----\n", v_tx_phase_deg / 65536, ((v_tx_phase_deg & 0xFFFF) * 1000) / 65536 );
   printf( "---- %u, %X ----\n", (unsigned int)v_tx_phase, (unsigned int)v_from );
-  for ( int i = 0; i < 13; ++i ) {
-    int v_len = g_x[i];
-    int v_d = full_atn( &v_len, g_y[i] ) - v_tx_phase_deg;
-    if ( v_d < 0 ) {
-      v_d += 360 * 65536;
-    }
-    v_len /= 65536;
-    if ( i == fft_idx ) {
-      // показометр "VDI"
-      v_column = (v_d / VDI_SECTOR_DEGREES) / 65536;
-      set_sound_freq_by_angle( ((uint32_t)v_column) * VDI_SECTOR_DEGREES );
-      display_fill_rectangle_dma_fast( g_last_column_fft * VDI_LINES_WIDTH, 0, VDI_LINES_WIDTH, VDI_LINES_HEIGHT, 0 );
-      display_fill_rectangle_dma_fast( v_column * VDI_LINES_WIDTH, 0, VDI_LINES_WIDTH, VDI_LINES_HEIGHT, VDI_FFT_COLOR );
-      g_last_column_fft = v_column;
-      // значение "сила отклика"
-      sprintf( g_str, "%d", v_len );
-      display_write_string_with_bg(
-            0, VDI_LINES_HEIGHT*2
-          , DISPLAY_WIDTH/2, font_25_30_font.m_row_height
-          , g_str
-          , &font_25_30_font
-          , DISPLAY_COLOR_GREEN
-          , DISPLAY_COLOR_DARKGREEN
-          );
-    }
-    printf(
-        "[%2d] x=%4d|y=%4d|r=%4d|d=%3d.%03d\n"
-      , i
-      , g_x[i] / 65536
-      , g_y[i] / 65536
-      , v_len
-      , v_d / 65536, ((v_d & 0xFFFF) * 1000) / 65536
-      );
+  int v_len = g_x[fft_idx];
+  int v_d = full_atn( &v_len, g_y[fft_idx] ) - v_tx_phase_deg;
+  if ( v_d < 0 ) {
+    v_d += 360 * 65536;
   }
+  v_len /= 65536;
+  // показометр "VDI"
+  v_column = (v_d / VDI_SECTOR_DEGREES) / 65536;
+  set_sound_freq_by_angle( ((uint32_t)v_column) * VDI_SECTOR_DEGREES );
+  display_fill_rectangle_dma_fast( g_last_column_fft * VDI_LINES_WIDTH, 0, VDI_LINES_WIDTH, VDI_LINES_HEIGHT, 0 );
+  display_fill_rectangle_dma_fast( v_column * VDI_LINES_WIDTH, 0, VDI_LINES_WIDTH, VDI_LINES_HEIGHT, VDI_FFT_COLOR );
+  g_last_column_fft = v_column;
+  // значение "сила отклика"
+  sprintf( g_str, "%d", v_len );
+  display_write_string_with_bg(
+        0, VDI_LINES_HEIGHT*2
+      , DISPLAY_WIDTH/2, font_25_30_font.m_row_height
+      , g_str
+      , &font_25_30_font
+      , DISPLAY_COLOR_GREEN
+      , DISPLAY_COLOR_DARKGREEN
+      );
+  printf(
+      "[%2d] x=%4d|y=%4d|r=%4d|d=%3d.%03d\n"
+    , fft_idx
+    , g_x[fft_idx] / 65536
+    , g_y[fft_idx] / 65536
+    , v_len
+    , v_d / 65536, ((v_d & 0xFFFF) * 1000) / 65536
+    );
   // теперь попробуем изобразить синхронный детектор
   // 1-й и 4-й квадранты X+, 2-й и 3-й - X-
   // 1-й квадрант Y+, 2-й квадрант Y-
@@ -259,7 +256,7 @@ static void gui_main() {
   // ограничение по целому числу периодов сигнала, помещающихся в окне выборки АЦП
   // т.к. нам надо рассматривать только целое количество периодов
   // отсюда граничение по минимальной частоте, в окно выборки АЦП должен целиком
-  // уместиться хотя бы один период сигнала, т.е. g_gen_freq >= 67108864 (2197.265625 Гц)
+  // уместиться хотя бы один период сигнала, т.е. g_gen_freq >= 33554432 (1098.6328125 Гц)
   uint64_t samplePhaseEdge = (((((uint64_t)ADC_SAMPLES_COUNT/2) * get_tx_freq()) >> 32) << 32) + samplePhase;
   //
   for ( int i = 0; i < ADC_SAMPLES_COUNT && samplePhase < samplePhaseEdge; ++i ) {
@@ -296,7 +293,7 @@ static void gui_main() {
   int v_X = ((sumX * 1024) / cnt) * 64;
   int v_Y = ((sumY * 1024) / cnt) * 64;
   int v_a = v_X;
-  int v_d = full_atn( &v_a, v_Y ) - v_tx_phase_deg;
+  v_d = full_atn( &v_a, v_Y ) - v_tx_phase_deg;
   if ( v_d < 0 ) {
     v_d += 360 * 65536;
   }
@@ -585,6 +582,28 @@ static void mi_ferrite() {
 
 
 static void mi_power() {
+  // для получения первого значения
+  g_tmp = -1;
+  // подключаем канал IN0 АЦП
+  ADC1->SQR3 = 0;
+  // строка заголовка
+  display_write_string_with_bg(
+        0, 0
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , g_top_menu[MENU_ITEM_BATTERY].name
+      , &font_25_30_font
+      , DISPLAY_COLOR_YELLOW
+      , DISPLAY_COLOR_MIDBLUE
+      );
+  // напряжение питания
+  display_write_string_with_bg(
+        0, font_25_30_font.m_row_height
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "Напряжение"
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , DISPLAY_COLOR_DARKBLUE
+      );
 }
 
 
@@ -593,6 +612,66 @@ static void mi_save_profile() {
 
 
 static void mi_load_profile() {
+  settings_t * v_current_profile = settings_get_current_profile();
+  // строка заголовка
+  display_write_string_with_bg(
+        0, 0
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , g_top_menu[MENU_ITEM_LOAD].name
+      , &font_25_30_font
+      , DISPLAY_COLOR_YELLOW
+      , DISPLAY_COLOR_MIDBLUE
+      );
+  // активный (загруженный) профиль
+  display_write_string_with_bg(
+        0, font_25_30_font.m_row_height
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "Активный"
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , DISPLAY_COLOR_DARKBLUE
+      );
+  // его номер
+  sprintf( g_str, "%d", (int)v_current_profile->profile_id.id );
+  display_write_string_with_bg(
+        DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+      , g_str
+      , &font_25_30_font
+      , DISPLAY_COLOR_WHITE
+      , DISPLAY_COLOR_DARKGRAY
+      );
+  // какой загрузить
+  display_write_string_with_bg(
+        0, font_25_30_font.m_row_height * 2
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "Загрузить"
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , DISPLAY_COLOR_DARKBLUE
+      );
+  // надо прочитать идентификаторы сохранённых профилей
+  if ( 0 == load_profiles_pointers( g_profiles_ptr ) ) {
+    // сигнал о том, что нет доступных к загрузке профилей
+    g_tmp = -1;
+  } else {
+    // поищем среди доступных к загрузке профиль с идентификатором, таким же, как у текущего
+    // если таковой найдётся, проставим его идентификатор в g_tmp
+    // иначе проставим туда идентификатор первого по порядку доступного профиля
+    if ( g_profiles_ptr[v_current_profile->profile_id.id] ) {
+      g_tmp = v_current_profile->profile_id.id;
+    } else {
+      // предохранитель чисто на всякий случай
+      g_tmp = -1;
+      // ищем первый попавшийся доступный профиль (из сохранённых во flash)
+      for ( int i = 0; i < PROFILES_COUNT; ++i ) {
+        if ( g_profiles_ptr[i] ) {
+          g_tmp = g_profiles_ptr[i]->profile_id.id;
+          break;
+        }
+      }
+    }
+  }
 }
 
 
@@ -829,6 +908,44 @@ static void mh_ferrite() {
 
 
 static void mh_power() {
+  // ждём заполнения буфера
+  bool v_last_flag = adc_buffer_flag();
+  while ( adc_buffer_flag() == v_last_flag ) {}
+  // быстренько получим адрес буфера
+  uint16_t * v_from = adc_get_buffer();
+  // собираем среднее значение
+  int v_avg = 0;
+  for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
+    v_avg += v_from[i];
+  }
+  //
+  v_avg /= (ADC_SAMPLES_COUNT/2);
+  //
+  if ( -1 == g_tmp ) {
+    g_tmp = v_avg;
+  } else {
+    g_tmp = (v_avg / 8) + ((v_avg * 7) / 8);
+  }
+  int v_volts = (g_tmp * 8052) / 32768;
+  // значение напряжения питания
+  sprintf( g_str, "%d.%02d", v_volts / 100, v_volts % 100 );
+  display_write_string_with_bg(
+          DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+        , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+        , g_str
+        , &font_25_30_font
+        , DISPLAY_COLOR_WHITE
+        , DISPLAY_COLOR_DARKGRAY
+        );
+  // кнопки
+  uint32_t v_changed = get_changed_buttons();
+  uint32_t v_buttons = get_buttons_state();
+  if ( 0 != v_changed ) {
+    if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
+      // нажата кнопка "OK"
+      back_to_settings( MENU_ITEM_BATTERY );
+    }
+  }
 }
 
 
@@ -837,4 +954,81 @@ static void mh_save_profile() {
 
 
 static void mh_load_profile() {
+  if ( -1 == g_tmp ) {
+    // нет доступных к загрузке профилей
+    display_write_string_with_bg(
+            0, font_25_30_font.m_row_height * 3
+          , DISPLAY_WIDTH, font_25_30_font.m_row_height
+          , "Профилей нет"
+          , &font_25_30_font
+          , DISPLAY_COLOR_WHITE
+          , DISPLAY_COLOR_MIDRED
+          );
+    delay_ms( 2000u );
+    back_to_settings( MENU_ITEM_SAVE );
+  } else {
+    // есть доступные профили
+    // отображаем номер выбранного
+    sprintf( g_str, "%d", g_tmp );
+    display_write_string_with_bg(
+            DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height * 2
+          , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+          , g_str
+          , &font_25_30_font
+          , DISPLAY_COLOR_WHITE
+          , DISPLAY_COLOR_DARKGRAY
+          );
+    // кнопки
+    uint32_t v_changed = get_changed_buttons();
+    uint32_t v_buttons = get_buttons_state();
+    if ( 0 != v_changed ) {
+      if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
+        // нажата кнопка "OK"
+        back_to_settings( MENU_ITEM_LOAD );
+      }
+      if ( 0 != (v_changed & BT_UP_mask) && 0 == (v_buttons & BT_UP_mask) ) {
+        // нажата кнопка "вверх", выбираем профиль с меньшим идентификатором, если есть
+        for ( int i = g_tmp - 1; i >= 0; --i ) {
+          if ( g_profiles_ptr[i] ) {
+            g_tmp = i;
+            break;
+          }
+        }
+      }
+      if ( 0 != (v_changed & BT_DOWN_mask) && 0 == (v_buttons & BT_DOWN_mask) ) {
+        // нажата кнопка "вниз", выбираем профиль с большим идентификатором, если есть
+        for ( int i = g_tmp + 1; i < PROFILES_COUNT; ++i ) {
+          if ( g_profiles_ptr[i] ) {
+            g_tmp = i;
+            break;
+          }
+        }
+      }
+      if ( 0 != (v_changed & BT_INC_mask) && 0 == (v_buttons & BT_INC_mask) ) {
+        // нажата кнопка "+", загружаем профиль
+        if ( load_profile( g_profiles_ptr[g_tmp] ) ) {
+          sprintf( g_str, "Загружен профиль %d", settings_get_current_profile()->profile_id.id );
+          display_write_string_with_bg(
+                  0, font_25_30_font.m_row_height * 3
+                , DISPLAY_WIDTH, font_25_30_font.m_row_height
+                , g_str
+                , &font_25_30_font
+                , DISPLAY_COLOR_WHITE
+                , DISPLAY_COLOR_MIDGREEN
+                );
+        } else {
+          display_write_string_with_bg(
+                  0, font_25_30_font.m_row_height * 3
+                , DISPLAY_WIDTH, font_25_30_font.m_row_height
+                , "Ошибка загрузки"
+                , &font_25_30_font
+                , DISPLAY_COLOR_WHITE
+                , DISPLAY_COLOR_MIDRED
+                );
+        }
+        delay_ms( 2000u );
+        back_to_settings( MENU_ITEM_LOAD );
+      }
+    }
+  }
 }

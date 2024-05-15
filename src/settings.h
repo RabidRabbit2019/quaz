@@ -2,10 +2,13 @@
 #define __SETTINGS_H__
 
 #include <stdint.h>
+#include <stdbool.h>
 
+#define SETTINGS_VERSION    1
 #define PROFILES_COUNT  4
 
 typedef struct {
+  uint32_t version;
   //
   struct {
     uint32_t id: 8;
@@ -30,7 +33,7 @@ typedef struct {
   // "маска" по уровню, "длине вектора", всё, что котроче, не озвучивается
   uint32_t barrier_level;
   // зарезервировано
-  uint32_t reserved[5];
+  uint32_t reserved[4];
   // "хэш" для проверки правильности считывания из FLASH
   uint32_t crc32;
 } settings_t;
@@ -47,6 +50,12 @@ typedef struct {
 void settings_init();
 // получить адрес структуры с текущими настройками
 settings_t * settings_get_current_profile();
+// загружает в массив a_dst размером PROFILES_COUNT адреса сохранённых во flash профилей
+// если какого-то профиля нет - в массиве будет NULL
+// возвращает количество актуальных указателей в a_dst
+int load_profiles_pointers( settings_t ** a_dst );
+// на входе адрес профиля из флэша, установить его текущим
+bool load_profile( settings_t * a_src );
 
 
 #endif // __SETTINGS_H__

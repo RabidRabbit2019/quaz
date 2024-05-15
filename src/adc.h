@@ -8,6 +8,7 @@
 #define ADC_SAMPLES_COUNT   256
 
 void adc_init();
+void adc_shutdown();
 
 bool adc_buffer_flag();
 bool adc_error_flag();

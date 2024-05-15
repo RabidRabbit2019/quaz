@@ -303,6 +303,12 @@ void gen_dds_init() {
 }
 
 
+void gen_dds_shutdown() {
+  // отключаем прерывание от таймера
+  __NVIC_DisableIRQ( TIM1_UP_IRQn );
+}
+
+
 // событие update таймера-1, обновляем регистры сравнения
 // эти значения перепишутся в "теневые" регистры при следующем Update Event
 void ih_TIM1_UP_IRQ() {

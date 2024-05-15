@@ -1,7 +1,9 @@
 #include "settings.h"
+#include "adc.h"
+#include "gen_dds.h"
 #include "stm32f103x6.h"
 
-#include <stdbool.h>
+#include <stdlib.h>
 
 
 extern volatile uint32_t g_milliseconds;
@@ -19,10 +21,11 @@ settings_t * settings_get_current_profile() {
 }
 
 
-static uint32_t crc32( settings_t * a_settings ) {
+static uint32_t crc32( const settings_t * a_settings ) {
+  settings_t v_settings = *a_settings;
+  v_settings.crc32 = 0;
   CRC->CR = CRC_CR_RESET;
-  a_settings->crc32 = 0;
-  uint32_t * v_from = (uint32_t *)a_settings;
+  uint32_t * v_from = (uint32_t *)&v_settings;
   for ( int i = 1; i < (int)(sizeof(settings_t) / sizeof(uint32_t)); ++i ) {
     CRC->DR = *v_from++;
   }
@@ -163,14 +166,57 @@ static void write_profile( settings_t * a_profile ) {
 }
 
 
+static bool is_valid_profile( const settings_t * a_profile ) {
+  return a_profile->crc32 == crc32( a_profile )
+      && a_profile->version == SETTINGS_VERSION
+      && a_profile->profile_id.id < PROFILES_COUNT;
+}
+
+
+int load_profiles_pointers( settings_t ** a_dst ) {
+  int v_result = 0;
+  // сбрасываем все указатели
+  for ( int i = 0; i < PROFILES_COUNT; ++i ) {
+    a_dst[i] = NULL;
+  }
+  // читаем профили из flash
+  settings_t * v_profiles = (settings_t *)settings_page_addr();
+  for ( int i = 0; i < (int)SETTINGS_RECORDS; ++i ) {
+    if ( is_valid_profile( &v_profiles[i] ) ) {
+      // здесь запись "правильная"
+      if ( a_dst[v_profiles[i].profile_id.id] ) {
+        // здесь такой профиль уже был, так что проверяем серийный номер
+        if ( a_dst[v_profiles[i].profile_id.id]->profile_id.serial_num <= v_profiles[i].profile_id.serial_num ) {
+          // очередная запись новее, используем её
+          a_dst[v_profiles[i].profile_id.id] = &v_profiles[i];
+        }
+      } else {
+        // записи ещё не было, запомним адрес новой записи
+        a_dst[v_profiles[i].profile_id.id] = &v_profiles[i];
+        // увеличим счётчик присутствующих профилей
+        ++v_result;
+      }
+    }
+  }
+  return v_result;
+}
+
+
 void settings_init() {
   for ( int i = 0; i < PROFILES_COUNT; ++i ) {
     // заполняем значениями по-умолчанию
+    g_profiles[i].version = SETTINGS_VERSION;
     g_profiles[i].profile_id.id = i;
     g_profiles[i].profile_id.serial_num = (PROFILES_COUNT - 1) - i;
     g_profiles[i].ferrite_angle = 0;
     g_profiles[i].ground_angle = 0;
-    g_profiles[i].gen_freq = 268435456u; // 140625 * 268435456 / (2^32) = 8789.0625 Гц
+    // сдвиг фазы для задания частоты генератора TX
+    // для получения целого количества периодов в выборке нужно, чтобы
+    // 256 * gen_freq / 2^32 было целым числом (256 - количество выборок в буфере)
+    // и при этом (2^32) / gen_freq тоже должно быть целым числом
+    // частота генератора 140625 * 268435456 / (2^32) = 8789.0625 Гц, 140625 Гц - опорная частота DDS генератора
+    // 2^32 - период в 360 градусов
+    g_profiles[i].gen_freq = 268435456u;
     g_profiles[i].level_comp = 1;
     g_profiles[i].level_sound = 500;
     g_profiles[i].level_tx = 300;
@@ -183,31 +229,26 @@ void settings_init() {
     // считаем CRC32
     g_profiles[i].crc32 = crc32( &g_profiles[i] );
   }
-  /*
   // последний килобайт флэша отдаём под хранение профилей.
   // пытаемся прочесть профили, активным будет профиль с максимальным serial_num
   bool v_profile_loaded = false;
   // адрес хранения профилей в последнем килобайте флэша
   settings_t * v_profiles = (settings_t *)settings_page_addr();
   for ( int i = 0; i < (int)SETTINGS_RECORDS; ++i ) {
-    if ( v_profiles->profile_id.id <= PROFILES_COUNT ) {
-      // проверим серийный номер
-      if ( v_profiles->profile_id.serial_num >= g_profiles[v_profiles->profile_id.id].profile_id.serial_num ) {
-        // проверяем crc32
-        if ( crc32( v_profiles ) == v_profiles->crc32 ) {
-          // копируем
-          g_profiles[v_profiles->profile_id.id] = *v_profiles;
-          //
-          v_profile_loaded = true;
-          // этот профиль возможно надо сделать текущим
-          if ( v_profiles->profile_id.serial_num > g_profiles[g_current_profile].profile_id.serial_num ) {
-            g_current_profile = v_profiles->profile_id.id;
-          }
-        }
+    if ( !is_valid_profile( &v_profiles[i] ) ) {
+      continue;
+    }
+    // проверим серийный номер
+    if ( v_profiles[i].profile_id.serial_num >= g_profiles[v_profiles[i].profile_id.id].profile_id.serial_num ) {
+      // копируем
+      g_profiles[v_profiles[i].profile_id.id] = *v_profiles;
+      //
+      v_profile_loaded = true;
+      // этот профиль возможно надо сделать текущим
+      if ( v_profiles[i].profile_id.serial_num > g_profiles[g_current_profile].profile_id.serial_num ) {
+        g_current_profile = v_profiles[i].profile_id.id;
       }
     }
-    //
-    ++v_profiles;
   }
   // если ничего не прочитали, значит там либо старьё, либо ничего нет
   if ( !v_profile_loaded ) {
@@ -218,5 +259,24 @@ void settings_init() {
       g_current_profile = 0;
     }
   }
-  */
+}
+
+
+bool load_profile( settings_t * a_src ) {
+  if ( is_valid_profile( a_src ) ) {
+    uint32_t v_serial_num = g_profiles[g_current_profile].profile_id.serial_num;
+    g_current_profile = a_src->profile_id.id;
+    g_profiles[g_current_profile] = *a_src;
+    g_profiles[g_current_profile].profile_id.serial_num = v_serial_num;
+    write_profile( &g_profiles[g_current_profile] );
+    // отключаем ADC и DDS
+    gen_dds_shutdown();
+    adc_shutdown();
+    // заново запускаем
+    adc_init();
+    gen_dds_init();
+    return true;
+  } else {
+    return false;
+  }
 }

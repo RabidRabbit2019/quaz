@@ -45,6 +45,7 @@ uint16_t * adc_get_buffer() {
 void adc_init() {
   GPIOA->CRL &= ~( GPIO_CRL_MODE3 | GPIO_CRL_CNF3
                  | GPIO_CRL_MODE1 | GPIO_CRL_CNF1
+                 | GPIO_CRL_MODE0 | GPIO_CRL_CNF0
                  );
   // настраиваем канал 1 DMA для получения данных от АЦП
   DMA1_Channel1->CCR = 0;
@@ -68,7 +69,7 @@ void adc_init() {
                      ;
   __NVIC_EnableIRQ( DMA1_Channel1_IRQn );
   // настраиваем ADC1, одиночное преобразование (IN3) по триггеру TIM3_TRGO
-  ADC1->SMPR2 = ADC_SMPR2_SMP3_1 | ADC_SMPR2_SMP1_1;
+  ADC1->SMPR2 = ADC_SMPR2_SMP3_1 | ADC_SMPR2_SMP1_1 | ADC_SMPR2_SMP0_1;
   ADC1->SQR1 = 0;
   ADC1->SQR3 = 3 << ADC_SQR3_SQ1_Pos;
   ADC1->SR = 0;
@@ -78,6 +79,28 @@ void adc_init() {
             | ADC_CR2_DMA
             | ADC_CR2_ADON
             ;
+}
+
+
+void adc_shutdown() {
+  // отключаем прерывание
+  __NVIC_DisableIRQ( DMA1_Channel1_IRQn );
+  // делаем сброс ADC1
+  RCC->APB2RSTR = RCC_APB2RSTR_ADC1RST;
+  delay_ms( 1u );
+  RCC->APB2RSTR = 0;
+  // отключаем DMA1 Channel1
+  DMA1_Channel1->CCR = 0;
+  DMA1->IFCR = DMA_IFCR_CTCIF1
+             | DMA_IFCR_CHTIF1
+             | DMA_IFCR_CTEIF1
+             | DMA_IFCR_CGIF1
+             ;
+  // начальные значения переменных
+  g_tx_phase_1 = 0;
+  g_tx_phase_2 = 0;
+  g_adc_buffer_flag = false;
+  g_adc_dma_error = false;
 }
 
 
