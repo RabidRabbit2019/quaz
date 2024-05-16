@@ -3,6 +3,8 @@
 #include "stm32f103x6.h"
 
 
+void delay_ms( uint32_t a_ms );
+
 // dds генераторы для TX, компенсации разбаланса и звука
 
 // ширина импульсов для косинуса, 256 уровней
@@ -306,6 +308,25 @@ void gen_dds_init() {
 void gen_dds_shutdown() {
   // отключаем прерывание от таймера
   __NVIC_DisableIRQ( TIM1_UP_IRQn );
+  // отключаем таймер 3
+  TIM3->CR1 = 0;
+  // отключаем таймер 1
+  TIM1->CR1 = 0;
+  // сброс таймеров 1 и 3
+  RCC->APB1RSTR = RCC_APB1RSTR_TIM3RST;
+  RCC->APB2RSTR = RCC_APB2RSTR_TIM1RST;
+  delay_ms( 2u );
+  RCC->APB1RSTR = 0;
+  RCC->APB2RSTR = 0;
+  // начальные значения переменных
+  g_phase_tx = 0;
+  g_phase_comp = 0;
+  g_phase_sound = 0;
+  g_level_tx = 0;
+  g_level_comp = 0;
+  g_level_sound = 0;
+  g_gen_freq = 0;
+  g_sound_freq = 0;
 }
 
 

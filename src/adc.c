@@ -3,6 +3,8 @@
 
 #include "stm32f103x6.h"
 
+void delay_ms( uint32_t a_ms );
+
 
 // двойной буфер
 uint16_t g_adc_buffer[ADC_SAMPLES_COUNT*2];
@@ -85,9 +87,11 @@ void adc_init() {
 void adc_shutdown() {
   // отключаем прерывание
   __NVIC_DisableIRQ( DMA1_Channel1_IRQn );
+  // отключаем ADC1
+  ADC1->CR2 = 0;
   // делаем сброс ADC1
   RCC->APB2RSTR = RCC_APB2RSTR_ADC1RST;
-  delay_ms( 1u );
+  delay_ms( 2u );
   RCC->APB2RSTR = 0;
   // отключаем DMA1 Channel1
   DMA1_Channel1->CCR = 0;
