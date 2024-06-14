@@ -4,8 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define SETTINGS_VERSION    1
-#define PROFILES_COUNT  4
+#define SETTINGS_VERSION    2
+#define PROFILES_COUNT      4
 
 typedef struct {
   uint32_t version;
@@ -30,10 +30,14 @@ typedef struct {
   int ground_angle;
   // ширина маски в градусах, маска считается от угла "феррита"
   uint32_t mask_width;
-  // "маска" по уровню, "длине вектора", всё, что котроче, не озвучивается
+  // "маска" по уровню, "длине вектора", всё, что короче, не озвучивается
   uint32_t barrier_level;
+  // коэффициент для преобразования измерений АЦП в значение напряжения в вольтах
+  uint32_t voltmeter;
+  // коэффициент для преобразования измерений АЦП в значение тока в миллиамперах
+  uint32_t ampermeter;
   // зарезервировано
-  uint32_t reserved[4];
+  uint32_t reserved[2];
   // "хэш" для проверки правильности считывания из FLASH
   uint32_t crc32;
 } settings_t;
@@ -56,6 +60,8 @@ settings_t * settings_get_current_profile();
 int load_profiles_pointers( settings_t ** a_dst );
 // на входе адрес профиля из флэша, установить его текущим
 bool load_profile( settings_t * a_src );
+// сохранить текущий профиль с указанным идентификатором
+void store_profile( int a_as_id );
 
 
 #endif // __SETTINGS_H__

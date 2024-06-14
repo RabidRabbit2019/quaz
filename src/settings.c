@@ -223,6 +223,8 @@ void settings_init() {
     g_profiles[i].mask_width = 16;
     g_profiles[i].barrier_level = 99;
     g_profiles[i].phase_comp_start = 0;
+    g_profiles[i].voltmeter = 16104u;
+    g_profiles[i].ampermeter = 115852u;
     for ( int r = 0; r < (int)(sizeof(g_profiles[0].reserved)/sizeof(g_profiles[0].reserved[0])); ++r ) {
       g_profiles[i].reserved[r] = 0;
     }
@@ -264,10 +266,21 @@ void settings_init() {
 
 bool load_profile( settings_t * a_src ) {
   if ( is_valid_profile( a_src ) ) {
+    // профиль норм, запомним серийный номер текущего профиля (он максимальный)
     uint32_t v_serial_num = g_profiles[g_current_profile].profile_id.serial_num;
+    // коэффициенты вольтметра и амперметра не загружаем при обычной загрузке профиля
+    uint32_t v_voltmeter = g_profiles[g_current_profile].voltmeter;
+    uint32_t v_ampermeter = g_profiles[g_current_profile].ampermeter;
+    // переключим номер активного профиля
     g_current_profile = a_src->profile_id.id;
+    // скопируем профиль из флэша в активный профиль
     g_profiles[g_current_profile] = *a_src;
+    // проставим активному профилю максимальный серийный номер
     g_profiles[g_current_profile].profile_id.serial_num = v_serial_num;
+    // актуальные значения для вольтметра и амперметра
+    g_profiles[g_current_profile].voltmeter = v_voltmeter;
+    g_profiles[g_current_profile].ampermeter = v_ampermeter;
+    // сохраним активный профиль во флэше, при этом у него увеличится на 1 серийный номер
     write_profile( &g_profiles[g_current_profile] );
     // отключаем ADC и DDS
     gen_dds_shutdown();
@@ -279,4 +292,24 @@ bool load_profile( settings_t * a_src ) {
   } else {
     return false;
   }
+}
+
+
+// сохранить текущий профиль с указанным идентификатором
+void store_profile( int a_as_id ) {
+  // просто проверка
+  if ( a_as_id < 0 || a_as_is >= PROFILES_COUNT ) {
+    return;
+  }
+  // если требуется записать текущий профиль с другим идентификатором
+  if ( g_current_profile != a_as_id ) {
+    // сначала копируем текущий профиль в профиль с указанным идентификатором
+    g_profiles[a_as_id] = g_profiles[g_current_profile];
+    // обновляем идентификатор текущего профиля
+    g_current_profile = a_as_id;
+    // в текущем профиле устанавливаем "правильный" идентификатор
+    g_profiles[g_current_profile].profile_id.id = g_current_profile;
+  }
+  // сохраняем текущий профиль во флэше.
+  write_profile( &g_profiles[g_current_profile] );
 }

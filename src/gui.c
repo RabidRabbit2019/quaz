@@ -556,6 +556,35 @@ static void mi_save_profile() {
       , DISPLAY_COLOR_YELLOW
       , DISPLAY_COLOR_MIDBLUE
       );
+  // активный (загруженный) профиль
+  display_write_string_with_bg(
+        0, font_25_30_font.m_row_height
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "Активный"
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , DISPLAY_COLOR_DARKBLUE
+      );
+  // его номер
+  g_tmp = (int)v_current_profile->profile_id.id;
+  sprintf( g_str, "%d", g_tmp );
+  display_write_string_with_bg(
+        DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+      , g_str
+      , &font_25_30_font
+      , DISPLAY_COLOR_WHITE
+      , DISPLAY_COLOR_DARKGRAY
+      );
+  // в какой профиль записать
+  display_write_string_with_bg(
+        0, font_25_30_font.m_row_height * 2
+      , DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
+      , "Сохранить в"
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , DISPLAY_COLOR_DARKBLUE
+      );
 }
 
 
@@ -632,6 +661,7 @@ static void back_to_settings( int a_from_item ) {
 
 
 static void mh_tx_gen() {
+  settings_t * v_current_profile = settings_get_current_profile();
   // индекс
   int fft_idx = get_fft_idx();
   // ждём заполнения буфера
@@ -670,7 +700,7 @@ static void mh_tx_gen() {
     g_tmp = (v_len / 16) + ((g_tmp * 15) / 16);
   }
   // с учётом номиналом элементов схемы
-  sprintf( g_str, "%u", (unsigned int)((((uint64_t)g_tmp)*115852u) >> 32) );
+  sprintf( g_str, "%u", (unsigned int)((v_current_profile->ampermeter * ((uint64_t)g_tmp)) >> 32) );
   display_write_string_with_bg(
           DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
         , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
@@ -693,6 +723,7 @@ static void mh_tx_gen() {
   uint32_t v_changed = get_changed_buttons();
   uint32_t v_buttons = get_buttons_state();
   if ( 0 != v_changed ) {
+    // кнопки "+" и "-" - регулировка уровня сигнала TX
     if ( 0 != (v_changed & BT_INC_mask) && 0 == (v_buttons & BT_INC_mask) ) {
       // нажата кнопка "+"
       set_tx_level( get_tx_level() + 1u );
@@ -701,6 +732,16 @@ static void mh_tx_gen() {
       // нажата кнопка "-"
       set_tx_level( get_tx_level() - 1u );
     }
+    // кнопки "вверх" и "вниз" - коррекция показаний измерителя тока в контуре TX
+    if ( 0 != (v_changed & BT_UP_mask) && 0 == (v_buttons & BT_UP_mask) ) {
+      // нажата кнопка "вверх"
+      ++v_current_profile->ampermeter;
+    }
+    if ( 0 != (v_changed & BT_DOWN_mask) && 0 == (v_buttons & BT_DOWN_mask) ) {
+      // нажата кнопка "вниз"
+      --v_current_profile->ampermeter;
+    }
+    // кнопка "ОК" - выход из настройки
     if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
       // нажата кнопка "OK"
       back_to_settings( MENU_ITEM_TX_POWER );
@@ -874,7 +915,7 @@ static void mh_power() {
   } else {
     g_tmp = (v_avg / 8) + ((v_avg * 7) / 8);
   }
-  int v_volts = (g_tmp * 8052) / 32768;
+  int v_volts = (g_tmp * 16104) / 65536;
   // значение напряжения питания
   sprintf( g_str, "%d.%02d", v_volts / 100, v_volts % 100 );
   display_write_string_with_bg(
@@ -898,6 +939,54 @@ static void mh_power() {
 
 
 static void mh_save_profile() {
+  // отображаем номер выбранного
+  sprintf( g_str, "%d", g_tmp );
+  display_write_string_with_bg(
+          DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height * 2
+        , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
+        , g_str
+        , &font_25_30_font
+        , DISPLAY_COLOR_WHITE
+        , DISPLAY_COLOR_DARKGRAY
+        );
+  // кнопки
+  uint32_t v_changed = get_changed_buttons();
+  uint32_t v_buttons = get_buttons_state();
+  if ( 0 != v_changed ) {
+    if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
+      // нажата кнопка "OK"
+      back_to_settings( MENU_ITEM_LOAD );
+    }
+    if ( 0 != (v_changed & BT_DEC_mask) && 0 == (v_buttons & BT_DEC_mask) ) {
+      // нажата кнопка "-", выбираем профиль с меньшим идентификатором, если возможно
+      if ( g_tmp > 0 ) {
+        --g_tmp;
+      }
+    }
+    if ( 0 != (v_changed & BT_INC_mask) && 0 == (v_buttons & BT_INC_mask) ) {
+      // нажата кнопка "+", выбираем профиль с большим идентификатором, если возможно
+      if ( g_tmp < (PROFILES_COUNT - 1) ) {
+        ++g_tmp;
+      }
+    }
+    // для сохранения выбранного профиля нужно одновременно нажать "вверх" и "вниз"
+    if ( 0 != (v_changed & (BT_UP_mask | BT_DOWN_mask)) && 0 == (v_buttons & (BT_UP_mask | BT_DOWN_mask)) ) {
+      // нажаты кнопки "вверх" и "вниз", сохраняем текущий профиль с выбранным идентификатором
+      store_profile( g_tmp );
+      sprintf( g_str, "Сохранён профиль %d", settings_get_current_profile()->profile_id.id );
+      display_write_string_with_bg(
+              0, font_25_30_font.m_row_height * 3
+            , DISPLAY_WIDTH, font_25_30_font.m_row_height
+            , g_str
+            , &font_25_30_font
+            , DISPLAY_COLOR_WHITE
+            , DISPLAY_COLOR_MIDGREEN
+            );
+      delay_ms( 2000u );
+      back_to_settings( MENU_ITEM_SAVE );
+    }
+  }
+  // сохраняем текущий профиль
 }
 
 
@@ -934,8 +1023,8 @@ static void mh_load_profile() {
         // нажата кнопка "OK"
         back_to_settings( MENU_ITEM_LOAD );
       }
-      if ( 0 != (v_changed & BT_UP_mask) && 0 == (v_buttons & BT_UP_mask) ) {
-        // нажата кнопка "вверх", выбираем профиль с меньшим идентификатором, если есть
+      if ( 0 != (v_changed & BT_DEC_mask) && 0 == (v_buttons & BT_DEC_mask) ) {
+        // нажата кнопка "-", выбираем профиль с меньшим идентификатором, если есть
         for ( int i = g_tmp - 1; i >= 0; --i ) {
           if ( g_profiles_ptr[i] ) {
             g_tmp = i;
@@ -943,8 +1032,8 @@ static void mh_load_profile() {
           }
         }
       }
-      if ( 0 != (v_changed & BT_DOWN_mask) && 0 == (v_buttons & BT_DOWN_mask) ) {
-        // нажата кнопка "вниз", выбираем профиль с большим идентификатором, если есть
+      if ( 0 != (v_changed & BT_INC_mask) && 0 == (v_buttons & BT_INC_mask) ) {
+        // нажата кнопка "+", выбираем профиль с большим идентификатором, если есть
         for ( int i = g_tmp + 1; i < PROFILES_COUNT; ++i ) {
           if ( g_profiles_ptr[i] ) {
             g_tmp = i;
@@ -952,8 +1041,9 @@ static void mh_load_profile() {
           }
         }
       }
-      if ( 0 != (v_changed & BT_INC_mask) && 0 == (v_buttons & BT_INC_mask) ) {
-        // нажата кнопка "+", загружаем профиль
+      // для загрузки выбранного профиля нужно одновременно нажать "вверх" и "вниз"
+      if ( 0 != (v_changed & (BT_UP_mask | BT_DOWN_mask)) && 0 == (v_buttons & (BT_UP_mask | BT_DOWN_mask)) ) {
+        // нажаты кнопки "вверх" и "вниз", загружаем профиль
         if ( load_profile( g_profiles_ptr[g_tmp] ) ) {
           sprintf( g_str, "Загружен профиль %d", settings_get_current_profile()->profile_id.id );
           display_write_string_with_bg(
