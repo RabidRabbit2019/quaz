@@ -223,7 +223,7 @@ void settings_init() {
     g_profiles[i].mask_width = 16;
     g_profiles[i].barrier_level = 99;
     g_profiles[i].phase_comp_start = 0;
-    g_profiles[i].voltmeter = 16104u;
+    g_profiles[i].voltmeter = 32208u;
     g_profiles[i].ampermeter = 115852u;
     for ( int r = 0; r < (int)(sizeof(g_profiles[0].reserved)/sizeof(g_profiles[0].reserved[0])); ++r ) {
       g_profiles[i].reserved[r] = 0;
@@ -298,7 +298,7 @@ bool load_profile( settings_t * a_src ) {
 // сохранить текущий профиль с указанным идентификатором
 void store_profile( int a_as_id ) {
   // просто проверка
-  if ( a_as_id < 0 || a_as_is >= PROFILES_COUNT ) {
+  if ( a_as_id < 0 || a_as_id >= PROFILES_COUNT ) {
     return;
   }
   // если требуется записать текущий профиль с другим идентификатором

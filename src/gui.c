@@ -28,6 +28,9 @@
 #define MAX_BARRIER_VALUE   999u
 #define MIN_BARRIER_VALUE   1u
 
+#define MAX_VOLTMETER_K_VALUE   131072u
+#define MIN_VOLTMETER_K_VALUE   1u
+
 
 static int g_gui_mode = GUI_MODE_MAIN;
 
@@ -385,6 +388,10 @@ static void gui_settings() {
         display_fill_rectangle_dma_fast( 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_BYTE_COLOR_BLACK );
         if ( MENU_ITEM_BACK == g_menu_item ) {
           // переключаемся на главный экран
+          // если настройки были изменены, сохраняем текущий профиль
+          
+          // чтобы определить наличие изменений, проверим CRC32 профиля
+          
           // подключаем канал IN3 АЦП
           ADC1->SQR3 = 3 << ADC_SQR3_SQ1_Pos;
           gui_items();
@@ -547,6 +554,7 @@ static void mi_power() {
 
 
 static void mi_save_profile() {
+  settings_t * v_current_profile = settings_get_current_profile();
   // строка заголовка
   display_write_string_with_bg(
         0, 0
@@ -850,7 +858,7 @@ static void mh_rx_balance() {
     if ( 0 != (v_changed & BT_DEC_mask) && 0 == (v_buttons & BT_DEC_mask) ) {
       // нажата кнопка "-"
       if ( 0 == g_menu_item ) {
-        // увеличиваем уровень сигнала компенсации
+        // уменьшаем уровень сигнала компенсации
         set_cm_level( get_cm_level() - 1u );
       } else {
         int64_t v_cm_phase_start = v_settings->phase_comp_start;
@@ -897,6 +905,7 @@ static void mh_ferrite() {
 
 
 static void mh_power() {
+  settings_t * v_settings = settings_get_current_profile();
   // ждём заполнения буфера
   bool v_last_flag = adc_buffer_flag();
   while ( adc_buffer_flag() == v_last_flag ) {}
@@ -915,7 +924,7 @@ static void mh_power() {
   } else {
     g_tmp = (v_avg / 8) + ((v_avg * 7) / 8);
   }
-  int v_volts = (g_tmp * 16104) / 65536;
+  int v_volts = (g_tmp * (int)(v_settings->voltmeter)) / MAX_VOLTMETER_K_VALUE;
   // значение напряжения питания
   sprintf( g_str, "%d.%02d", v_volts / 100, v_volts % 100 );
   display_write_string_with_bg(
@@ -930,9 +939,23 @@ static void mh_power() {
   uint32_t v_changed = get_changed_buttons();
   uint32_t v_buttons = get_buttons_state();
   if ( 0 != v_changed ) {
+    // кнопки "вверх" и "вниз" - коррекция показаний измерителя напряжения питания
+    if ( 0 != (v_changed & BT_UP_mask) && 0 == (v_buttons & BT_UP_mask) ) {
+      // нажата кнопка "вверх", увеличиваем коэффициент
+      if ( v_settings->voltmeter < MAX_VOLTMETER_K_VALUE ) {
+        ++v_settings->voltmeter;
+      }
+    }
+    if ( 0 != (v_changed & BT_DOWN_mask) && 0 == (v_buttons & BT_DOWN_mask) ) {
+      // нажата кнопка "вниз"
+      if ( v_settings->voltmeter > MIN_VOLTMETER_K_VALUE ) {
+        --v_settings->voltmeter;
+      }
+    }
+    // кнопка "ОК" - выход из настройки
     if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
       // нажата кнопка "OK"
-      back_to_settings( MENU_ITEM_BATTERY );
+      back_to_settings( MENU_ITEM_TX_POWER );
     }
   }
 }
