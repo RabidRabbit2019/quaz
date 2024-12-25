@@ -223,7 +223,9 @@ void settings_init() {
     g_profiles[i].mask_width = 16;
     g_profiles[i].barrier_level = 99;
     g_profiles[i].phase_comp_start = 0;
+    // определяется схемотехническим решением (конкретными сопротивлениями резисторов делителя)
     g_profiles[i].voltmeter = 32208u;
+    // определяется схемотехническим решением (значением сопротивления резистора шунта и параметров фильтра)
     g_profiles[i].ampermeter = 115852u;
     for ( int r = 0; r < (int)(sizeof(g_profiles[0].reserved)/sizeof(g_profiles[0].reserved[0])); ++r ) {
       g_profiles[i].reserved[r] = 0;

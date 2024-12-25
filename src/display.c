@@ -441,7 +441,7 @@ bool prepare_char_line( uint16_t * a_buf, display_char_s * a_symbols, int a_symb
 
 
 // draw string a_str within rectangle(a_width, a_height) at a_x, a_y
-// string for 8 or less symbols, one line
+// string for MAX_ONE_STR_SYMBOLS or less symbols, one line
 // flicker-free display - line by line for entire rectangle with double-buffer
 void display_write_string_with_bg(
             int a_x

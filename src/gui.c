@@ -181,7 +181,7 @@ void gui_init() {
   gui_items();
 }
 
-
+// индекс в результатах ФФТ с частотой, наиболее близкой к частоте TX
 static int get_fft_idx() {
   return (int)(((((uint64_t)ADC_SAMPLES_COUNT/2) * get_tx_freq()) + 0x80000000ul) >> 32);
 }
