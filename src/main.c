@@ -23,12 +23,14 @@
 // PA9 - USART1_TX (AF7)
 // -> экран 
 // PB3 - SPI1/SCK, PB5 - SPI1/MOSI (AF5)
-// PB4 - сброс, PB6 - подсветка, PB7 - команда/данные, PB8 - nCS, 
+// PB4 - сброс, PB6 - подсветка, PB7 - команда/данные, PB9 - nCS, 
 // -> индикатор
 // PC6 - LED
+// -> кнопки
+// PB10..PB14
 
 // PA: 1, 2, 3, 4, 5, 8, 9
-// PB: 3, 4, 5, 6, 7, 8
+// PB: 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14
 // PC: 6
 
 
@@ -127,21 +129,19 @@ void run() {
   GPIOC->BSRR = GPIO_BSRR_BS6;
   //
   settings_init();
-  // buttons_init();
+  buttons_init();
   adc_init();
   gen_dds_init();
   display_init();
   //
-  display_write_string_with_bg( 0, 100, 320, 40, "https://www.md4u.ru", &font_25_30_font, DISPLAY_COLOR_WHITE, DISPLAY_COLOR_DARKBLUE );
+  display_write_string_with_bg( 0, 100, 320, 40, "Всем добра!", &font_25_30_font, DISPLAY_COLOR_WHITE, DISPLAY_COLOR_DARKBLUE );
   delay_ms(3000u);
   // gui_init();
   // основной цикл
   printf( "Hello from WeAct STM32G431CBU6 fat board!\n" );
   for (;;) {
-    /*
     buttons_scan();
-    gui_process();
-    */
+    // gui_process();
     //
     GPIOC->ODR ^= GPIO_ODR_OD6;
     delay_ms( 500u );

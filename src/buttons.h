@@ -5,11 +5,11 @@
 #include <stdint.h>
 
 
-#define BT_OK_mask   (1UL<<14)
-#define BT_UP_mask   (1UL<<12)
-#define BT_DOWN_mask (1UL<<11)
-#define BT_INC_mask  (1UL<<15)
-#define BT_DEC_mask  (1UL<<13)
+#define BT_OK_mask   (1UL<<10)
+#define BT_UP_mask   (1UL<<11)
+#define BT_DOWN_mask (1UL<<12)
+#define BT_INC_mask  (1UL<<13)
+#define BT_DEC_mask  (1UL<<14)
 
 
 void buttons_init();

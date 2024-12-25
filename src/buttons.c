@@ -11,6 +11,7 @@
 // интервал между "автоматическими" нажатиями на кнопку
 #define BT_AUTOREPEAT_INTERVAL  100u
 
+void delay_ms( uint32_t a_ms );
 
 static uint32_t g_buttons = 0;
 static uint32_t g_buttons_change = 0;
@@ -46,23 +47,22 @@ uint32_t get_buttons_state() {
 // начальные настройки
 void buttons_init() {
   // PB12..PB15 входы с подтяжкой к питанию
-  GPIOB->CRH = (GPIOC->CRH & ~( GPIO_CRH_MODE11 | GPIO_CRH_CNF11
-                              | GPIO_CRH_MODE12 | GPIO_CRH_CNF12
-                              | GPIO_CRH_MODE13 | GPIO_CRH_CNF13
-                              | GPIO_CRH_MODE14 | GPIO_CRH_CNF14
-                              | GPIO_CRH_MODE15 | GPIO_CRH_CNF15 ))
-               | GPIO_CRH_CNF11_1
-               | GPIO_CRH_CNF12_1
-               | GPIO_CRH_CNF13_1
-               | GPIO_CRH_CNF14_1
-               | GPIO_CRH_CNF15_1
+  GPIOB->MODER = (GPIOB->MODER & ~( GPIO_MODER_MODE10
+                                  | GPIO_MODER_MODE11
+                                  | GPIO_MODER_MODE12
+                                  | GPIO_MODER_MODE13
+                                  | GPIO_MODER_MODE14 ));
+  GPIOB->PUPDR = (GPIOB->PUPDR & ~( GPIO_PUPDR_PUPDR10
+                                  | GPIO_PUPDR_PUPDR11
+                                  | GPIO_PUPDR_PUPDR12
+                                  | GPIO_PUPDR_PUPDR13
+                                  | GPIO_PUPDR_PUPDR14 ))
+               | GPIO_PUPDR_PUPD10_0
+               | GPIO_PUPDR_PUPD11_0
+               | GPIO_PUPDR_PUPD12_0
+               | GPIO_PUPDR_PUPD13_0
+               | GPIO_PUPDR_PUPD14_0
                ;
-  GPIOB->ODR |= ( BT_OK_mask
-                | BT_UP_mask
-                | BT_DOWN_mask
-                | BT_INC_mask
-                | BT_DEC_mask
-                );
   delay_ms( 5u );
   g_buttons = GPIOB->IDR;
   for ( int i = 0; i < BT_COUNT; ++i ) {
