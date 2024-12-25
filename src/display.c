@@ -334,15 +334,20 @@ void display_init() {
             | SPI_CR1_CPHA
             ;
   // настройки DMA для SPI1
-  // тактирование DMA1 включено в main.cpp
+  // тактирование DMA1 включено в adc.c
   // enable receive and transmit
-  SPI1->CR2 = SPI_CR2_RXDMAEN | SPI_CR2_TXDMAEN;
+  SPI1->CR2 = SPI_CR2_DS_0
+            | SPI_CR2_DS_1
+            | SPI_CR2_DS_2
+            | SPI_CR2_FRXTH
+            | SPI_CR2_RXDMAEN
+            | SPI_CR2_TXDMAEN;
   DMA1_Channel2->CPAR = (uint32_t)&(SPI1->DR);
   DMA1_Channel3->CPAR = (uint32_t)&(SPI1->DR);
   // настраиваем DMAMUX1_Channel1, запрос от SPI1 приём (resource input #10)
   DMAMUX1_Channel1->CCR = (10 << DMAMUX_CxCR_DMAREQ_ID_Pos);
   // настраиваем DMAMUX1_Channel2, запрос от SPI1 передача (resource input #11)
-  DMAMUX1_Channel1->CCR = (11 << DMAMUX_CxCR_DMAREQ_ID_Pos);
+  DMAMUX1_Channel2->CCR = (11 << DMAMUX_CxCR_DMAREQ_ID_Pos);
   // reset sequence
   delay_ms(150);
   display_select();

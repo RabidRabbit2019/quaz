@@ -98,9 +98,8 @@ void run() {
                   | RCC_AHB2ENR_GPIOBEN
                   | RCC_AHB2ENR_GPIOCEN
                   );
-  // тактирование остального на APB2
-  RCC->APB2ENR |= ( RCC_APB2ENR_USART1EN
-                  );
+  // тактирование USART1
+  RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
   // USART1 TX/PA9 AF7
   GPIOA->AFR[1] = (GPIOA->AFR[1] & ~GPIO_AFRH_AFSEL9)
                 | (7 << GPIO_AFRH_AFSEL9_Pos)
