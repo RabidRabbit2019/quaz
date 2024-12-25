@@ -1,2 +1,2 @@
 # quaz
-test project, based on bluepill board
+ветка проекта для платы на основе STM32G431CBU6

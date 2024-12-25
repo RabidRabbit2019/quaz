@@ -8,6 +8,9 @@ release:
 	  adc.c \
 	  gen_dds.c \
 	  settings.c \
+	  display.c \
+	  fonts/font_bmp.c \
+	  fonts/font_25_30.c \
 	  -ffunction-sections -fdata-sections -mcpu=cortex-m4 -mthumb -lnosys \
 	  -nostartfiles -ffreestanding -specs=nosys.specs -pipe
 	arm-none-eabi-gcc -c -Wall -Wextra -Os -s \
@@ -22,6 +25,9 @@ release:
 	  adc.o \
 	  gen_dds.o \
 	  settings.o \
+	  display.o \
+	  font_bmp.o \
+	  font_25_30.o \
 	  -Wl,-gc-sections -mcpu=cortex-m4 -mthumb -lnosys -nostartfiles -ffreestanding \
 	  -specs=nosys.specs -TSTM32G431CBU6_FLASH.ld -pipe -flto -o a.elf
 
@@ -34,6 +40,9 @@ debug:
 	  adc.c \
 	  gen_dds.c \
 	  settings.c \
+	  display.c \
+	  fonts/font_bmp.c \
+	  fonts/font_25_30.c \
 	  -ffunction-sections -fdata-sections -mcpu=cortex-m4 -mthumb -lnosys -nostartfiles \
 	  -ffreestanding -specs=nosys.specs -pipe
 	arm-none-eabi-gcc \
@@ -44,6 +53,9 @@ debug:
 	  adc.o \
 	  gen_dds.o \
 	  settings.o \
+	  display.o \
+	  font_bmp.o \
+	  font_25_30.o \
 	  -Wl,-gc-sections -mcpu=cortex-m4 -mthumb -lnosys -nostartfiles -ffreestanding \
 	  -specs=nosys.specs -TSTM32G431CBU6_FLASH.ld -o a.elf
 

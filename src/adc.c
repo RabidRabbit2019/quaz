@@ -71,9 +71,7 @@ void adc_startup( unsigned int a_adc_input ) {
                      ;
   __NVIC_EnableIRQ( DMA1_Channel1_IRQn );
   // настраиваем DMAMUX1_Channel0, запрос от ADC1 (resource input #5)
-  DMAMUX1_Channel0->CCR = DMAMUX_CxCR_DMAREQ_ID_2
-                        | DMAMUX_CxCR_DMAREQ_ID_0
-                        ;
+  DMAMUX1_Channel0->CCR = (5 << DMAMUX_CxCR_DMAREQ_ID_Pos);
   // включаем DMA1_Channel1
   DMA1_Channel1->CCR |= DMA_CCR_EN;
   // настраиваем ADC1, одиночное преобразование (IN4) по триггеру TIM3_TRGO
@@ -110,9 +108,8 @@ void adc_init() {
              ;
   // включаем тактирование ADC
   RCC->AHB2ENR |= RCC_AHB2ENR_ADC12EN;
-  // включаем тактирование DMA1 и DMAMUX
-  RCC->AHB1ENR |= ( RCC_AHB1ENR_DMA1EN
-                  | RCC_AHB1ENR_DMAMUX1EN );
+  // включаем тактирование DMA1 (DMAMUX1 включен в main.c)
+  RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;
   // PA1, PA2, PA3 - аналоговый режим
   GPIOA->MODER |= ( GPIO_MODER_MODE1
                   | GPIO_MODER_MODE2

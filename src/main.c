@@ -22,7 +22,8 @@
 // -> UART, отладка
 // PA9 - USART1_TX (AF7)
 // -> экран 
-// PB3 - SPI1/SCK, PB4 - сброс, PB5 - SPI1/MOSI, PB6 - подсветка, PB7 - команда/данные, PB8 - nCS, 
+// PB3 - SPI1/SCK, PB5 - SPI1/MOSI (AF5)
+// PB4 - сброс, PB6 - подсветка, PB7 - команда/данные, PB8 - nCS, 
 // -> индикатор
 // PC6 - LED
 
@@ -61,7 +62,7 @@ void run() {
   while ( 0 == (RCC->CR & RCC_CR_HSERDY) ) {}
   // FLASH latency 2
   FLASH->ACR = (FLASH->ACR & ~(FLASH_ACR_LATENCY))
-             | FLASH_ACR_LATENCY_2WS
+             | FLASH_ACR_LATENCY_4WS
              ;
   // clock params: PLL = (HSE/1)*36 = 288 MHz, PLLR = PLL/2 = 144 MHz, AHB = PLLR/1, APB1 = PLLR/2, APB2 = PLLR/2
   RCC->CFGR = RCC_CFGR_SW_HSI
@@ -90,6 +91,8 @@ void run() {
             | RCC_CFGR_HPRE_DIV1
             ;
   // now clock at 144 MHz, AHB 144 MHz, APB1 72 MHz, APB2 72 MHz
+  // DMAMUX1
+  RCC->AHB1ENR |= RCC_AHB1ENR_DMAMUX1EN;
   // GPIO
   RCC->AHB2ENR |= ( RCC_AHB2ENR_GPIOAEN
                   | RCC_AHB2ENR_GPIOBEN
@@ -128,10 +131,10 @@ void run() {
   // buttons_init();
   adc_init();
   gen_dds_init();
-  // display_init();
+  display_init();
   //
-  // display_write_string_with_bg( 0, 100, 320, 40, "https://www.md4u.ru", &font_25_30_font, DISPLAY_COLOR_WHITE, DISPLAY_COLOR_DARKBLUE );
-  // delay_ms(3000u);
+  display_write_string_with_bg( 0, 100, 320, 40, "https://www.md4u.ru", &font_25_30_font, DISPLAY_COLOR_WHITE, DISPLAY_COLOR_DARKBLUE );
+  delay_ms(3000u);
   // gui_init();
   // основной цикл
   printf( "Hello from WeAct STM32G431CBU6 fat board!\n" );

@@ -275,44 +275,52 @@ void display_fill_rectangle_dma_fast( uint16_t x, uint16_t y, uint16_t w, uint16
 void display_init() {
   // PB3 - SPI1/SCK, PB4 - сброс, PB5 - SPI1/MOSI, PB6 - подсветка, PB7 - команда/данные, PB8 - nCS, 
   // настройка PB4, PB6, PB7 и PB8: output push-pull normal speed
-  GPIOB->OTYPER |= ( GPIOB->OTYPER & ~( GPIO_OTYPER_OT4
-                                      | GPIO_OTYPER_OT6
-                                      | GPIO_OTYPER_OT7
-                                      | GPIO_OTYPER_OT8 
-                                      ) );
-  GPIOB->OSPEEDR |= ( GPIOB->OSPEEDR & ~( GPIO_OSPEEDR_OSPEED4
-                                        | GPIO_OSPEEDR_OSPEED6
-                                        | GPIO_OSPEEDR_OSPEED7
-                                        | GPIO_OSPEEDR_OSPEED8
-                                        ) )
-                  | GPIO_OSPEEDR_OSPEED4_0
-                  | GPIO_OSPEEDR_OSPEED6_0
-                  | GPIO_OSPEEDR_OSPEED7_0
-                  | GPIO_OSPEEDR_OSPEED8_0
-                  ;
-  GPIOB->MODER |= ( GPIOB->MODER & ~( GPIO_MODER_MODE4
-                                    | GPIO_MODER_MODE6
-                                    | GPIO_MODER_MODE7
-                                    | GPIO_MODER_MODE8
-                                    ) )
-                  | GPIO_MODER_MODE4_0
-                  | GPIO_MODER_MODE6_0
-                  | GPIO_MODER_MODE7_0
-                  | GPIO_MODER_MODE8_0
-                  ;
+  GPIOB->OTYPER = (GPIOB->OTYPER & ~( GPIO_OTYPER_OT4
+                                     | GPIO_OTYPER_OT6
+                                     | GPIO_OTYPER_OT7
+                                     | GPIO_OTYPER_OT8 
+                                     ));
+  GPIOB->OSPEEDR = (GPIOB->OSPEEDR & ~( GPIO_OSPEEDR_OSPEED4
+                                       | GPIO_OSPEEDR_OSPEED6
+                                       | GPIO_OSPEEDR_OSPEED7
+                                       | GPIO_OSPEEDR_OSPEED8
+                                       ))
+                 | GPIO_OSPEEDR_OSPEED4_0
+                 | GPIO_OSPEEDR_OSPEED6_0
+                 | GPIO_OSPEEDR_OSPEED7_0
+                 | GPIO_OSPEEDR_OSPEED8_0
+                 ;
+  GPIOB->MODER = (GPIOB->MODER & ~( GPIO_MODER_MODE4
+                                   | GPIO_MODER_MODE6
+                                   | GPIO_MODER_MODE7
+                                   | GPIO_MODER_MODE8
+                                   ))
+               | GPIO_MODER_MODE4_0
+               | GPIO_MODER_MODE6_0
+               | GPIO_MODER_MODE7_0
+               | GPIO_MODER_MODE8_0
+               ;
   // включаем подсветку сразу, без неё всё равно нихрена не видно :)
   GPIOB->BSRR = GPIO_BSRR_BS6;
-  // настройка PB3 и PB5
-  GPIOA->CRL = ( GPIOA->CRL & ~( GPIO_CRL_MODE7 | GPIO_CRL_CNF7
-                               | GPIO_CRL_MODE6 | GPIO_CRL_CNF6
-                               | GPIO_CRL_MODE5 | GPIO_CRL_CNF5 ) )
-               | GPIO_CRL_MODE7 | GPIO_CRL_CNF7_1 // PA7 выход, 50 МГц, альтернативная функция
-               | GPIO_CRL_MODE6                   // PA6 выход, 50 МГц ввод/вывод
-               | GPIO_CRL_MODE5 | GPIO_CRL_CNF5_1 // PA5 выход, 50 МГц, альтернативная функция
+  // настройка PB3 и PB5, output push-pull AF5 high speed
+  GPIOB->AFR[0] = (GPIOB->AFR[0] & ~(GPIO_AFRL_AFSEL3 | GPIO_AFRL_AFSEL5))
+                | (5 << GPIO_AFRL_AFSEL3_Pos)
+                | (5 << GPIO_AFRL_AFSEL5_Pos)
+                ;
+  GPIOB->OTYPER = (GPIOB->OTYPER & ~(GPIO_OTYPER_OT3 | GPIO_OTYPER_OT5));
+  GPIOB->OSPEEDR = (GPIOB->OSPEEDR & (GPIO_OSPEEDR_OSPEED3 | GPIO_OSPEEDR_OSPEED5))
+                 | GPIO_OSPEEDR_OSPEED3_1
+                 | GPIO_OSPEEDR_OSPEED5_1
+                 ;
+  GPIOB->MODER = (GPIOB->MODER & ~(GPIO_MODER_MODE3 | GPIO_MODER_MODE5))
+               | GPIO_MODER_MODE3_1
+               | GPIO_MODER_MODE5_1
                ;
+  //
   display_deselect();
-  GPIOB->BSRR = GPIO_BSRR_BS10;
-  // тактирование SPI1 включено в main.cpp
+  GPIOB->BSRR = GPIO_BSRR_BS4;
+  // тактирование
+  RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
   // SPI clock = APB2 clock / 4 (72 / 4 = 18 MHz), master mode, SPI mode 3
   // на счёт SPI mode в даташите на ILI9341 непонятки. в таймингах последовательного
   // интерфейса явно нарисована картина SPI mode 3, а в описании передачи данных - SPI mode 0
@@ -331,6 +339,10 @@ void display_init() {
   SPI1->CR2 = SPI_CR2_RXDMAEN | SPI_CR2_TXDMAEN;
   DMA1_Channel2->CPAR = (uint32_t)&(SPI1->DR);
   DMA1_Channel3->CPAR = (uint32_t)&(SPI1->DR);
+  // настраиваем DMAMUX1_Channel1, запрос от SPI1 приём (resource input #10)
+  DMAMUX1_Channel1->CCR = (10 << DMAMUX_CxCR_DMAREQ_ID_Pos);
+  // настраиваем DMAMUX1_Channel2, запрос от SPI1 передача (resource input #11)
+  DMAMUX1_Channel1->CCR = (11 << DMAMUX_CxCR_DMAREQ_ID_Pos);
   // reset sequence
   delay_ms(150);
   display_select();
