@@ -1,9 +1,10 @@
 #include "settings.h"
 #include "adc.h"
 #include "gen_dds.h"
-#include "stm32f103x6.h"
+#include "stm32g431xx.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 
 
 extern volatile uint32_t g_milliseconds;
@@ -34,7 +35,7 @@ static uint32_t crc32( const settings_t * a_settings ) {
 
 
 static uint32_t settings_page_addr() {
-  return FLASH_BASE + (((uint32_t)(*((uint16_t *)FLASHSIZE_BASE) - 1)) * 1024u);
+  return FLASH_BASE + (((uint32_t)(*((uint16_t *)FLASHSIZE_BASE) - (FLASH_PAGE_SIZE/1024))) * 1024u);
 }
 
 
@@ -71,19 +72,28 @@ static bool erase_flash_page() {
     }
   }
   // стираем страницу
-  // сначала ждём освобожения флэш-контроллера
+  // сначала ждём освобождения флэш-контроллера
   uint32_t v_from = g_milliseconds;
   while ( 0 != (FLASH->SR & FLASH_SR_BSY) ) {
     if ( ((uint32_t)(g_milliseconds - v_from)) > 500 ) {
       return false;
     }
   }
+  // сбрасываем флаги ошибок
+  FLASH->SR |= ( FLASH_SR_OPTVERR
+               | FLASH_SR_RDERR
+               | FLASH_SR_FASTERR
+               | FLASH_SR_MISERR
+               | FLASH_SR_PGSERR
+               | FLASH_SR_SIZERR
+               | FLASH_SR_PGAERR
+               | FLASH_SR_WRPERR
+               | FLASH_SR_PROGERR
+               | FLASH_SR_OPERR
+               | FLASH_SR_EOP );
   // выбираем стирание страницы
-  FLASH->CR = (FLASH->CR & ~(FLASH_CR_PG | FLASH_CR_MER | FLASH_CR_OPTPG | FLASH_CR_OPTER))
-              | FLASH_CR_PER
-              ;
-  // адрес страницы
-  FLASH->AR = settings_page_addr();
+  FLASH->CR = ( FLASH_CR_PNB // номер последней страницы
+              | FLASH_CR_PER );
   // пуск!
   FLASH->CR |= FLASH_CR_STRT;
   // ждём завершения стирания
@@ -108,8 +118,9 @@ static bool zap_profiles_page() {
 }
 
 
-
-static void write_flash( uint16_t * a_dst, uint16_t * a_src, uint32_t a_count ) {
+// адрес записи должен быть выровнен по границе 8 байт
+// a_count - количество 32-битных слов для записи
+static void write_flash( uint32_t * a_dst, uint32_t * a_src, uint32_t a_count ) {
   if ( 0 != (FLASH->CR & FLASH_CR_LOCK) ) {
     // флэш-контроллер заблокирован, пробуем разблокировать
     FLASH->KEYR = 0x45670123;
@@ -119,7 +130,7 @@ static void write_flash( uint16_t * a_dst, uint16_t * a_src, uint32_t a_count ) 
       return;
     }
   }
-  // пишем по 16 битов
+  // пишем по 64 бита
   // сначала ждём освобожения флэш-контроллера
   uint32_t v_from = g_milliseconds;
   while ( 0 != (FLASH->SR & FLASH_SR_BSY) ) {
@@ -127,12 +138,26 @@ static void write_flash( uint16_t * a_dst, uint16_t * a_src, uint32_t a_count ) 
       return;
     }
   }
+  //
+  a_count /= 2;
+  //
   while ( 0 != a_count ) {
+    // сбрасываем флаги ошибок
+    FLASH->SR |= ( FLASH_SR_OPTVERR
+                 | FLASH_SR_RDERR
+                 | FLASH_SR_FASTERR
+                 | FLASH_SR_MISERR
+                 | FLASH_SR_PGSERR
+                 | FLASH_SR_SIZERR
+                 | FLASH_SR_PGAERR
+                 | FLASH_SR_WRPERR
+                 | FLASH_SR_PROGERR
+                 | FLASH_SR_OPERR
+                 | FLASH_SR_EOP );
     // выбираем запись
-    FLASH->CR = (FLASH->CR & ~(FLASH_CR_PER | FLASH_CR_MER | FLASH_CR_OPTPG | FLASH_CR_OPTER))
-                | FLASH_CR_PG
-                ;
-    // пишем
+    FLASH->CR = FLASH_CR_PG;
+    // пишем два 32-битных слова
+    *a_dst++ = *a_src++;
     *a_dst++ = *a_src++;
     // ждём завершения записи
     v_from = g_milliseconds;
@@ -141,6 +166,7 @@ static void write_flash( uint16_t * a_dst, uint16_t * a_src, uint32_t a_count ) 
         return;
       }
     }
+    //
     --a_count;
   }
 }
@@ -154,14 +180,14 @@ static void write_profile( settings_t * a_profile ) {
       // запись стёрта, пишем сюда
       a_profile->profile_id.serial_num = g_profiles[g_current_profile].profile_id.serial_num + 1;
       a_profile->crc32 = crc32( a_profile );
-      write_flash( (uint16_t *)v_ptr, (uint16_t *)a_profile, sizeof(settings_t)/sizeof(uint16_t) );
+      write_flash( (uint32_t *)v_ptr, (uint32_t *)a_profile, WORDS_IN_RECORD );
       return;
     }
     ++v_ptr;
   }
   // все места заняты, стираем страницу и записываем все профили
   if ( zap_profiles_page() ) {
-    write_flash( (uint16_t *)settings_page_addr(), (uint16_t *)g_profiles, PROFILES_COUNT*sizeof(g_profiles[0])/sizeof(uint16_t) );
+    write_flash( (uint32_t *)settings_page_addr(), (uint32_t *)g_profiles, PROFILES_COUNT * WORDS_IN_RECORD );
   }
 }
 
@@ -203,6 +229,9 @@ int load_profiles_pointers( settings_t ** a_dst ) {
 
 
 void settings_init() {
+  // включаем блок CRC
+  RCC->AHB1ENR |= RCC_AHB1ENR_CRCEN;
+  //
   for ( int i = 0; i < PROFILES_COUNT; ++i ) {
     // заполняем значениями по-умолчанию
     g_profiles[i].version = SETTINGS_VERSION;
@@ -217,15 +246,15 @@ void settings_init() {
     // частота генератора 140625 * 268435456 / (2^32) = 8789.0625 Гц, 140625 Гц - опорная частота DDS генератора
     // 2^32 - период в 360 градусов
     g_profiles[i].gen_freq = 268435456u;
-    g_profiles[i].level_comp = 1;
+    g_profiles[i].level_comp = 512;
     g_profiles[i].level_sound = 500;
-    g_profiles[i].level_tx = 300;
+    g_profiles[i].level_tx = 4096;
     g_profiles[i].mask_width = 16;
     g_profiles[i].barrier_level = 99;
     g_profiles[i].phase_comp_start = 0;
     // определяется схемотехническим решением (конкретными сопротивлениями резисторов делителя)
     g_profiles[i].voltmeter = 32208u;
-    // определяется схемотехническим решением (значением сопротивления резистора шунта и параметров фильтра)
+    // определяется схемотехническим решением (значением сопротивления резистора шунта и параметрами фильтра)
     g_profiles[i].ampermeter = 115852u;
     for ( int r = 0; r < (int)(sizeof(g_profiles[0].reserved)/sizeof(g_profiles[0].reserved[0])); ++r ) {
       g_profiles[i].reserved[r] = 0;
@@ -233,10 +262,10 @@ void settings_init() {
     // считаем CRC32
     g_profiles[i].crc32 = crc32( &g_profiles[i] );
   }
-  // последний килобайт флэша отдаём под хранение профилей.
+  // последнюю страницу флэша отдаём под хранение профилей.
   // пытаемся прочесть профили, активным будет профиль с максимальным serial_num
   bool v_profile_loaded = false;
-  // адрес хранения профилей в последнем килобайте флэша
+  // адрес хранения профилей в последней странице флэша
   settings_t * v_profiles = (settings_t *)settings_page_addr();
   for ( int i = 0; i < (int)SETTINGS_RECORDS; ++i ) {
     if ( !is_valid_profile( &v_profiles[i] ) ) {

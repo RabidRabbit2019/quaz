@@ -1,5 +1,5 @@
 #include "buttons.h"
-#include "stm32f103x6.h"
+#include "stm32g431xx.h"
 
 
 #define BT_COUNT     5

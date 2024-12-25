@@ -5,37 +5,25 @@ release:
 	  main.c \
 	  trace.c \
 	  stdio.c \
-	  gen_dds.c \
 	  adc.c \
-	  calc.c \
-	  display.c \
+	  gen_dds.c \
 	  settings.c \
-	  buttons.c \
-	  gui.c \
-	  fonts/font_bmp.c \
-	  fonts/font_25_30.c \
-	  -ffunction-sections -fdata-sections -mcpu=cortex-m3 -mthumb -lnosys \
+	  -ffunction-sections -fdata-sections -mcpu=cortex-m4 -mthumb -lnosys \
 	  -nostartfiles -ffreestanding -specs=nosys.specs -pipe
 	arm-none-eabi-gcc -c -Wall -Wextra -Os -s \
 	  vectors.c \
-	  -ffunction-sections -fdata-sections -mcpu=cortex-m3 -mthumb -lnosys \
+	  -ffunction-sections -fdata-sections -mcpu=cortex-m4 -mthumb -lnosys \
 	  -nostartfiles -ffreestanding -specs=nosys.specs -pipe
 	arm-none-eabi-gcc \
 	  vectors.o \
 	  main.o \
 	  trace.o \
 	  stdio.o \
-	  gen_dds.o \
 	  adc.o \
-	  calc.o \
-	  display.o \
+	  gen_dds.o \
 	  settings.o \
-	  buttons.o \
-	  gui.o \
-	  font_bmp.o \
-	  font_25_30.o \
-	  -Wl,-gc-sections -mcpu=cortex-m3 -mthumb -lnosys -nostartfiles -ffreestanding \
-	  -specs=nosys.specs -TSTM32F103C8Tx_FLASH.ld -pipe -flto -o a.elf
+	  -Wl,-gc-sections -mcpu=cortex-m4 -mthumb -lnosys -nostartfiles -ffreestanding \
+	  -specs=nosys.specs -TSTM32G431CBU6_FLASH.ld -pipe -flto -o a.elf
 
 debug:
 	arm-none-eabi-gcc -c -Wall -Wextra -O0 -g \
@@ -43,33 +31,21 @@ debug:
 	  main.c \
 	  trace.c \
 	  stdio.c \
-	  gen_dds.c \
 	  adc.c \
-	  calc.c \
-	  display.c \
+	  gen_dds.c \
 	  settings.c \
-	  buttons.c \
-	  gui.c \
-	  fonts/font_bmp.c \
-	  fonts/font_25_30.c \
-	  -ffunction-sections -fdata-sections -mcpu=cortex-m3 -mthumb -lnosys -nostartfiles \
+	  -ffunction-sections -fdata-sections -mcpu=cortex-m4 -mthumb -lnosys -nostartfiles \
 	  -ffreestanding -specs=nosys.specs -pipe
 	arm-none-eabi-gcc \
 	  vectors.o \
 	  main.o \
 	  trace.o \
 	  stdio.o \
-	  gen_dds.o \
 	  adc.o \
-	  calc.o \
-	  display.o \
+	  gen_dds.o \
 	  settings.o \
-	  buttons.o \
-	  gui.o \
-	  font_bmp.o \
-	  font_25_30.o \
-	  -Wl,-gc-sections -mcpu=cortex-m3 -mthumb -lnosys -nostartfiles -ffreestanding \
-	  -specs=nosys.specs -TSTM32F103C8Tx_FLASH.ld -o a.elf
+	  -Wl,-gc-sections -mcpu=cortex-m4 -mthumb -lnosys -nostartfiles -ffreestanding \
+	  -specs=nosys.specs -TSTM32G431CBU6_FLASH.ld -o a.elf
 
 clean:
 	rm *.elf

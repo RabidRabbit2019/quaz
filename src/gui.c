@@ -5,7 +5,7 @@
 #include "settings.h"
 #include "buttons.h"
 #include "fonts/font_25_30.h"
-#include "stm32f103x6.h"
+#include "stm32g431xx.h"
 
 #include <stdio.h>
 

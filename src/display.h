@@ -2,7 +2,6 @@
 #define __DISPLAY_H__
 
 #include "fonts/font_bmp.h"
-#include "stm32f103x6.h"
 
 #include <stdint.h>
 

@@ -1,7 +1,7 @@
 #include "adc.h"
 #include "gen_dds.h"
 
-#include "stm32f103x6.h"
+#include "stm32g431xx.h"
 
 void delay_ms( uint32_t a_ms );
 
@@ -42,13 +42,14 @@ uint16_t * adc_get_buffer() {
 // ADC1 работает по событию TIM1_CC3
 // буфер на ADC_SAMPLES_COUNT*2 значений, по прерываниям половины буфера и полного буфера
 // запоминается фаза DDS генератора TX
-// частота ADC 9 МГц, sample_time = 13.5 тактов, время преобразования (13.5+12.5)/9000000 ~= 2.9 мкс
+// частота ADC 36 МГц, sample_time = 92.5 тактов, время преобразования (92.5+12.5)/36000000 ~= 2.9 мкс
 // при этом период выборки 256/72000000 ~= 3.6 мкс, т.е. АЦП всё успевает
-void adc_init() {
-  GPIOA->CRL &= ~( GPIO_CRL_MODE3 | GPIO_CRL_CNF3
-                 | GPIO_CRL_MODE1 | GPIO_CRL_CNF1
-                 | GPIO_CRL_MODE0 | GPIO_CRL_CNF0
-                 );
+// ADC12_IN2     PA1 - контроль напряжения питания
+// ADC1_IN3      PA2 - контроль тока в контуре TX
+// ADC1_IN4      PA3 - сигнал от вхлодного усилителя
+
+
+void adc_startup( unsigned int a_adc_input ) {
   // настраиваем канал 1 DMA для получения данных от АЦП
   DMA1_Channel1->CCR = 0;
   DMA1_Channel1->CPAR = (uint32_t)&ADC1->DR;
@@ -63,24 +64,62 @@ void adc_init() {
                      | DMA_CCR_MSIZE_0
                      | DMA_CCR_PSIZE_0
                      | DMA_CCR_MINC
+                     | DMA_CCR_CIRC
                      | DMA_CCR_TEIE
                      | DMA_CCR_HTIE
                      | DMA_CCR_TCIE
-                     | DMA_CCR_CIRC
-                     | DMA_CCR_EN
                      ;
   __NVIC_EnableIRQ( DMA1_Channel1_IRQn );
-  // настраиваем ADC1, одиночное преобразование (IN3) по триггеру TIM3_TRGO
-  ADC1->SMPR2 = ADC_SMPR2_SMP3_1 | ADC_SMPR2_SMP1_1 | ADC_SMPR2_SMP0_1;
-  ADC1->SQR1 = 0;
-  ADC1->SQR3 = 3 << ADC_SQR3_SQ1_Pos;
-  ADC1->SR = 0;
-  ADC1->CR1 = ADC_CR1_SCAN;
-  ADC1->CR2 = ADC_CR2_EXTTRIG
-            | ADC_CR2_EXTSEL_2
-            | ADC_CR2_DMA
-            | ADC_CR2_ADON
+  // настраиваем DMAMUX1_Channel0, запрос от ADC1 (resource input #5)
+  DMAMUX1_Channel0->CCR = DMAMUX_CxCR_DMAREQ_ID_2
+                        | DMAMUX_CxCR_DMAREQ_ID_0
+                        ;
+  // включаем DMA1_Channel1
+  DMA1_Channel1->CCR |= DMA_CCR_EN;
+  // настраиваем ADC1, одиночное преобразование (IN4) по триггеру TIM3_TRGO
+  ADC1->CR = 0;
+  ADC1->ISR = ADC_ISR_ADRDY
+            | ADC_ISR_EOSMP
+            | ADC_ISR_EOC
+            | ADC_ISR_EOS
+            | ADC_ISR_OVR
+            | ADC_ISR_JEOC
+            | ADC_ISR_JEOS
+            | ADC_ISR_AWD1
+            | ADC_ISR_AWD2
+            | ADC_ISR_AWD3
+            | ADC_ISR_JQOVF
             ;
+  ADC12_COMMON->CCR = ADC_CCR_CKMODE; // делим 144 МГц (AHB) на 4, получаем 36 МГц
+  ADC1->SMPR1 = ADC_SMPR1_SMP4_1 | ADC_SMPR1_SMP3_1 | ADC_SMPR1_SMP2_1;
+  ADC1->SQR1 = (a_adc_input & 0x1F) << ADC_SQR1_SQ1_Pos;
+  ADC1->CFGR = ADC_CFGR_EXTEN_0
+             | ADC_CFGR_EXTSEL_2
+             | ADC_CFGR_DMACFG
+             | ADC_CFGR_DMAEN
+             ;
+  ADC1->CR |= ADC_CR_ADEN;
+  ADC1->CR |= ADC_CR_ADSTART;
+}
+
+
+void adc_init() {
+  // источник тактирования ADC1 - System clock, т.е. 144 МГц
+  RCC->CCIPR = (RCC->CCIPR & ~(RCC_CCIPR_ADC12SEL))
+             | RCC_CCIPR_ADC12SEL_1
+             ;
+  // включаем тактирование ADC
+  RCC->AHB2ENR |= RCC_AHB2ENR_ADC12EN;
+  // включаем тактирование DMA1 и DMAMUX
+  RCC->AHB1ENR |= ( RCC_AHB1ENR_DMA1EN
+                  | RCC_AHB1ENR_DMAMUX1EN );
+  // PA1, PA2, PA3 - аналоговый режим
+  GPIOA->MODER |= ( GPIO_MODER_MODE1
+                  | GPIO_MODER_MODE2
+                  | GPIO_MODER_MODE3
+                  );
+  //
+  adc_startup( ADC_IN_RX );
 }
 
 
@@ -88,9 +127,10 @@ void adc_shutdown() {
   // отключаем прерывание
   __NVIC_DisableIRQ( DMA1_Channel1_IRQn );
   // отключаем ADC1
-  ADC1->CR2 = 0;
+  ADC1->CR |= ADC_CR_ADDIS;
+  delay_ms( 2u );
   // делаем сброс ADC1
-  RCC->APB2RSTR = RCC_APB2RSTR_ADC1RST;
+  RCC->AHB2RSTR = RCC_AHB2RSTR_ADC12RST;
   delay_ms( 2u );
   RCC->APB2RSTR = 0;
   // отключаем DMA1 Channel1

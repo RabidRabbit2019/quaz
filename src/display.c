@@ -1,5 +1,5 @@
 #include "display.h"
-#include "stm32f103x6.h"
+#include "stm32g431xx.h"
 
 
 #define ILI9341_RESET           0x01
@@ -75,22 +75,22 @@ static const uint8_t g_ili9341_init[] = {
 
 
 static void display_select() {
-  GPIOA->BSRR = GPIO_BSRR_BR6;
+  GPIOB->BSRR = GPIO_BSRR_BR8;
 }
 
 
 static void display_deselect() {
-  GPIOA->BSRR = GPIO_BSRR_BS6;
+  GPIOB->BSRR = GPIO_BSRR_BS8;
 }
 
 
 static void display_cmd_mode() {
-  GPIOB->BSRR = GPIO_BSRR_BR0;
+  GPIOB->BSRR = GPIO_BSRR_BR7;
 }
 
 
 static void display_data_mode() {
-  GPIOB->BSRR = GPIO_BSRR_BS0;
+  GPIOB->BSRR = GPIO_BSRR_BS7;
 }
 
 
@@ -273,19 +273,36 @@ void display_fill_rectangle_dma_fast( uint16_t x, uint16_t y, uint16_t w, uint16
 
 
 void display_init() {
-  // PB10 - сброс, PB1 - подсветка, PB0 - команда/данные, PA7 - SPI1/MOSI, PA6 - nCS, PA5 - SPI1/SCK
-  // настройка PB1 и PB0
-  GPIOB->CRH = ( GPIOB->CRH & ~( GPIO_CRH_MODE10 | GPIO_CRH_CNF10 ) )
-               | GPIO_CRH_MODE10
-               ;
-  GPIOB->CRL = ( GPIOB->CRL & ~( GPIO_CRL_MODE1 | GPIO_CRL_CNF1
-                               | GPIO_CRL_MODE0 | GPIO_CRL_CNF0 ) )
-               | GPIO_CRL_MODE1
-               | GPIO_CRL_MODE0
-               ;
+  // PB3 - SPI1/SCK, PB4 - сброс, PB5 - SPI1/MOSI, PB6 - подсветка, PB7 - команда/данные, PB8 - nCS, 
+  // настройка PB4, PB6, PB7 и PB8: output push-pull normal speed
+  GPIOB->OTYPER |= ( GPIOB->OTYPER & ~( GPIO_OTYPER_OT4
+                                      | GPIO_OTYPER_OT6
+                                      | GPIO_OTYPER_OT7
+                                      | GPIO_OTYPER_OT8 
+                                      ) );
+  GPIOB->OSPEEDR |= ( GPIOB->OSPEEDR & ~( GPIO_OSPEEDR_OSPEED4
+                                        | GPIO_OSPEEDR_OSPEED6
+                                        | GPIO_OSPEEDR_OSPEED7
+                                        | GPIO_OSPEEDR_OSPEED8
+                                        ) )
+                  | GPIO_OSPEEDR_OSPEED4_0
+                  | GPIO_OSPEEDR_OSPEED6_0
+                  | GPIO_OSPEEDR_OSPEED7_0
+                  | GPIO_OSPEEDR_OSPEED8_0
+                  ;
+  GPIOB->MODER |= ( GPIOB->MODER & ~( GPIO_MODER_MODE4
+                                    | GPIO_MODER_MODE6
+                                    | GPIO_MODER_MODE7
+                                    | GPIO_MODER_MODE8
+                                    ) )
+                  | GPIO_MODER_MODE4_0
+                  | GPIO_MODER_MODE6_0
+                  | GPIO_MODER_MODE7_0
+                  | GPIO_MODER_MODE8_0
+                  ;
   // включаем подсветку сразу, без неё всё равно нихрена не видно :)
-  GPIOB->BSRR = GPIO_BSRR_BS1;
-  // настройка PA5..7
+  GPIOB->BSRR = GPIO_BSRR_BS6;
+  // настройка PB3 и PB5
   GPIOA->CRL = ( GPIOA->CRL & ~( GPIO_CRL_MODE7 | GPIO_CRL_CNF7
                                | GPIO_CRL_MODE6 | GPIO_CRL_CNF6
                                | GPIO_CRL_MODE5 | GPIO_CRL_CNF5 ) )

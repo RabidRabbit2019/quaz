@@ -4,9 +4,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define SETTINGS_VERSION    2
+#define SETTINGS_VERSION    1
 #define PROFILES_COUNT      4
 
+
+// размер структуры должен быть кратен 8 байтам и на него должен нацело делиться размер страницы флэша
 typedef struct {
   uint32_t version;
   //
@@ -43,12 +45,13 @@ typedef struct {
 } settings_t;
 
 
-// сколько записей settings_t помещается на одной транице флэша (1КиБ)
-#define SETTINGS_RECORDS (1024/sizeof(settings_t))
+#define FLASH_PAGE_SIZE  2048
+// сколько записей settings_t помещается на одной странице флэша
+#define SETTINGS_RECORDS (FLASH_PAGE_SIZE/sizeof(settings_t))
 // сколько 32-битных слов в одной записи
 #define WORDS_IN_RECORD (sizeof(settings_t)/sizeof(uint32_t))
 //
-#define WORDS_IN_PAGE (1024/sizeof(uint32_t))
+#define WORDS_IN_PAGE (FLASH_PAGE_SIZE/sizeof(uint32_t))
 
 //
 void settings_init();

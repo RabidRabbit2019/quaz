@@ -6,9 +6,29 @@
 #include "buttons.h"
 #include "gui.h"
 #include "fonts/font_25_30.h"
-#include "stm32f103x6.h"
+#include "stm32g431xx.h"
 
 #include <stdio.h>
+
+// STM32G431CBU6 назначение выводов, всё использованное
+// -> АЦП
+// PA1 - ADC12_IN2
+// PA2 - ADC1_IN3
+// PA3 - ADC1_IN4
+// -> ЦАП
+// PA4 - DAC1_OUT1, PA5 - DAC1_OUT2 (Analog)
+// -> ШИМ, звук
+// PA8 - TIM1_CH1 (AF6)
+// -> UART, отладка
+// PA9 - USART1_TX (AF7)
+// -> экран 
+// PB3 - SPI1/SCK, PB4 - сброс, PB5 - SPI1/MOSI, PB6 - подсветка, PB7 - команда/данные, PB8 - nCS, 
+// -> индикатор
+// PC6 - LED
+
+// PA: 1, 2, 3, 4, 5, 8, 9
+// PB: 3, 4, 5, 6, 7, 8
+// PC: 6
 
 
 extern volatile uint32_t g_milliseconds;
@@ -34,99 +54,94 @@ void run() {
     *i = 0;
   }
   // at start clock source = HSI
-  // configure RCC: 8 MHz HSE + PLL x9 = 72 MHz
+  // configure RCC: 8 MHz HSE + PLL/1*36/2 = 144 MHz
   // enable HSE
   RCC->CR |= RCC_CR_HSEON;
   // wait for HSE starts
   while ( 0 == (RCC->CR & RCC_CR_HSERDY) ) {}
   // FLASH latency 2
-  FLASH->ACR = FLASH_ACR_PRFTBE
-             | FLASH_ACR_LATENCY_2
+  FLASH->ACR = (FLASH->ACR & ~(FLASH_ACR_LATENCY))
+             | FLASH_ACR_LATENCY_2WS
              ;
-  // clock params: PLL = (HSE/1)*9, AHB = PLL/1, APB1 = PLL/2, APB2 = PLL/1
+  // clock params: PLL = (HSE/1)*36 = 288 MHz, PLLR = PLL/2 = 144 MHz, AHB = PLLR/1, APB1 = PLLR/2, APB2 = PLLR/2
   RCC->CFGR = RCC_CFGR_SW_HSI
-            | RCC_CFGR_HPRE_DIV1
+            | RCC_CFGR_HPRE_DIV2   // сначала подключаем частоту AHB=PLL/2=72MHz
             | RCC_CFGR_PPRE1_DIV2
-            | RCC_CFGR_PPRE2_DIV1
-            | RCC_CFGR_ADCPRE_DIV2
-            | RCC_CFGR_PLLSRC
-            | RCC_CFGR_PLLXTPRE_HSE
-            | RCC_CFGR_PLLMULL9
-            | RCC_CFGR_USBPRE
-            | RCC_CFGR_MCO_NOCLOCK
+            | RCC_CFGR_PPRE2_DIV2
             ;
+  RCC->PLLCFGR = RCC_PLLCFGR_PLLSRC_HSE
+               | RCC_PLLCFGR_PLLN_5 // 
+               | RCC_PLLCFGR_PLLN_2 // *36 (32+4)
+               | RCC_PLLCFGR_PLLREN
+               ;
   // enable PLL
   RCC->CR |= RCC_CR_PLLON;
   // wait for PLL starts
   while ( 0 == (RCC->CR & RCC_CR_PLLRDY) ) {}
-  // switch clock source from HSI to PLL, it works because SW_HSI = 0
+  // switch clock source from HSI to PLL, it works because SW_HSI16 = 1, SW_PLL = 3
   RCC->CFGR |= RCC_CFGR_SW_PLL;
-  // now clock at 72 MHz, AHB 72 MHz, APB1 36 MHz, APB2 72 MHz
-  // тактирование AFIO
-  RCC->APB2ENR |= ( RCC_APB2ENR_AFIOEN
+  // SysTick interrupt for each millisecond
+  SysTick_Config2( 18000 );
+  __enable_irq();
+  // ждём больше 1 мкс.
+  delay_ms( 2 );
+  // ставим делитель 1 для AHB (частота AHB  = 144МГц)
+  RCC->CFGR = (RCC->CFGR & ~(RCC_CFGR_HPRE))
+            | RCC_CFGR_HPRE_DIV1
+            ;
+  // now clock at 144 MHz, AHB 144 MHz, APB1 72 MHz, APB2 72 MHz
+  // GPIO
+  RCC->AHB2ENR |= ( RCC_AHB2ENR_GPIOAEN
+                  | RCC_AHB2ENR_GPIOBEN
+                  | RCC_AHB2ENR_GPIOCEN
                   );
-  // remap USART1 (PB6 TX, PB7 RX)
-  AFIO->MAPR = AFIO_MAPR_USART1_REMAP | AFIO_MAPR_I2C1_REMAP;
   // тактирование остального на APB2
-  RCC->APB2ENR |= ( RCC_APB2ENR_IOPCEN
-                  | RCC_APB2ENR_IOPBEN
-                  | RCC_APB2ENR_IOPAEN
-                  | RCC_APB2ENR_USART1EN
-                  | RCC_APB2ENR_ADC1EN
-                  | RCC_APB2ENR_TIM1EN
-                  | RCC_APB2ENR_SPI1EN
+  RCC->APB2ENR |= ( RCC_APB2ENR_USART1EN
                   );
-  // USART1 TX/PB6 RX/PB7
-  GPIOB->CRL = (GPIOB->CRL & ~( GPIO_CRL_MODE7 | GPIO_CRL_CNF7
-                              | GPIO_CRL_MODE6 | GPIO_CRL_CNF6 ))
-                | GPIO_CRL_CNF7_1
-                | GPIO_CRL_MODE6_0 | GPIO_CRL_CNF6_1
+  // USART1 TX/PA9 AF7
+  GPIOA->AFR[1] = (GPIOA->AFR[1] & ~GPIO_AFRH_AFSEL9)
+                | (7 << GPIO_AFRH_AFSEL9_Pos)
+                ;
+  GPIOA->OTYPER = (GPIOA->OTYPER & ~GPIO_OTYPER_OT9);
+  GPIOA->OSPEEDR = (GPIOA->OSPEEDR & ~GPIO_OSPEEDR_OSPEED9)
+                 | GPIO_OSPEEDR_OSPEED9_0
+                 ;
+  GPIOA->MODER = (GPIOA->MODER & ~GPIO_MODER_MODE9)
+               | GPIO_MODER_MODE9_1
                ;
   // USART1 115200 8N1
-  // 72E6 / 16 / 39.0625 = 115200
-  USART1->SR = 0;
-  USART1->BRR = (39 << USART_BRR_DIV_Mantissa_Pos) | (1 << USART_BRR_DIV_Fraction_Pos);
-  USART1->CR3 = 0;
+  // 72E6 / 625 = 115200
+  USART1->CR1 = 0;
+  USART1->BRR = 625;
   USART1->CR2 = 0;
-  USART1->CR1 = USART_CR1_TE
-              | USART_CR1_UE
-              ;
-  // PIOC13 - output push-pull, low speed
-  GPIOC->CRH = (GPIOC->CRH & ~(GPIO_CRH_MODE13 | GPIO_CRH_CNF13))
-               | GPIO_CRH_MODE13_1
+  USART1->CR1 |= USART_CR1_UE;
+  USART1->CR1 |= USART_CR1_TE;
+  // PC6 - output push-pull, low speed, синий светодиод, подключен к GND
+  GPIOC->OTYPER = 0;
+  GPIOC->OSPEEDR = 0;
+  GPIOC->MODER = (GPIOC->MODER & ~GPIO_MODER_MODE6)
+               | GPIO_MODER_MODE6_0
                ;
-  GPIOC->BSRR = GPIO_BSRR_BS13;
-  // включаем тактирование TIM3
-  RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
-  // включаем тактирование для DMA1 и CRC
-  RCC->AHBENR |= ( RCC_AHBENR_DMA1EN
-                 | RCC_AHBENR_CRCEN
-                 );
-  // тактирование АЦП 9 МГц (72000000/8)
-  RCC->CFGR |= RCC_CFGR_ADCPRE_DIV8;
-  
-  // SysTick interrupt for each millisecond
-  SysTick_Config( 9000 );
+  GPIOC->BSRR = GPIO_BSRR_BS6;
   //
   settings_init();
-  buttons_init();
+  // buttons_init();
   adc_init();
   gen_dds_init();
-  display_init();
+  // display_init();
   //
-  display_write_string_with_bg( 0, 100, 320, 40, "https://www.md4u.ru", &font_25_30_font, DISPLAY_COLOR_WHITE, DISPLAY_COLOR_DARKBLUE );
-  delay_ms(3000u);
-  gui_init();
+  // display_write_string_with_bg( 0, 100, 320, 40, "https://www.md4u.ru", &font_25_30_font, DISPLAY_COLOR_WHITE, DISPLAY_COLOR_DARKBLUE );
+  // delay_ms(3000u);
+  // gui_init();
   // основной цикл
+  printf( "Hello from WeAct STM32G431CBU6 fat board!\n" );
   for (;;) {
+    /*
     buttons_scan();
     gui_process();
+    */
     //
-    if ( 0 == (GPIOC->ODR & GPIO_ODR_ODR13) ) {
-      GPIOC->BSRR = GPIO_BSRR_BS13;
-    } else {
-      GPIOC->BSRR = GPIO_BSRR_BR13;
-    }
-    //delay_ms( 503u );
+    GPIOC->ODR ^= GPIO_ODR_OD6;
+    delay_ms( 500u );
   }
 }
