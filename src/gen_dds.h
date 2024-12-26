@@ -17,6 +17,7 @@
 
 
 void gen_dds_init();
+void gen_dds_startup();
 void gen_dds_shutdown();
 uint32_t get_tx_phase();
 uint32_t get_tx_freq();

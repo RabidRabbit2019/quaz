@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define SETTINGS_VERSION    1
+#define SETTINGS_VERSION    3
 #define PROFILES_COUNT      4
 
 

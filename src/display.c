@@ -317,6 +317,8 @@ void display_init() {
                | GPIO_MODER_MODE5_1
                ;
   //
+  GPIOB->BSRR = GPIO_BSRR_BR4;
+  delay_ms( 2u );
   display_deselect();
   GPIOB->BSRR = GPIO_BSRR_BS4;
   // тактирование

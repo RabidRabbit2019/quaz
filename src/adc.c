@@ -46,7 +46,7 @@ uint16_t * adc_get_buffer() {
 // при этом период выборки 256/72000000 ~= 3.6 мкс, т.е. АЦП всё успевает
 // ADC12_IN2     PA1 - контроль напряжения питания
 // ADC1_IN3      PA2 - контроль тока в контуре TX
-// ADC1_IN4      PA3 - сигнал от вхлодного усилителя
+// ADC1_IN4      PA3 - сигнал от входного усилителя
 
 
 void adc_startup( unsigned int a_adc_input ) {
@@ -74,6 +74,8 @@ void adc_startup( unsigned int a_adc_input ) {
   DMAMUX1_Channel0->CCR = (5 << DMAMUX_CxCR_DMAREQ_ID_Pos);
   // включаем DMA1_Channel1
   DMA1_Channel1->CCR |= DMA_CCR_EN;
+  // тактирование АЦП
+  ADC12_COMMON->CCR = ADC_CCR_CKMODE; // делим 144 МГц (AHB) на 4, получаем 36 МГц
   // настраиваем ADC1, одиночное преобразование (вход с номером a_adc_input) по триггеру TIM3_TRGO
   ADC1->ISR = ADC_ISR_ADRDY
             | ADC_ISR_EOSMP
@@ -122,8 +124,6 @@ void adc_init() {
                   | GPIO_MODER_MODE2
                   | GPIO_MODER_MODE3
                   );
-  // тактирование АЦП
-  ADC12_COMMON->CCR = ADC_CCR_CKMODE; // делим 144 МГц (AHB) на 4, получаем 36 МГц
   //
   adc_startup( ADC_IN_RX );
 }
@@ -138,11 +138,11 @@ void adc_shutdown() {
   while ( 0 != (ADC1->CR & (ADC_CR_ADSTART | ADC_CR_ADSTP)) ) {}
   // отключаем ADC1
   ADC1->CR |= ADC_CR_ADDIS;
-  delay_ms( 2u );
+  while ( 0 != (ADC1->CR & ADC_CR_ADEN) ) {}
   // делаем сброс ADC1
   RCC->AHB2RSTR = RCC_AHB2RSTR_ADC12RST;
   delay_ms( 2u );
-  RCC->APB2RSTR = 0;
+  RCC->AHB2RSTR = 0;
   // отключаем DMA1 Channel1
   DMA1_Channel1->CCR = 0;
   DMA1->IFCR = DMA_IFCR_CTCIF1

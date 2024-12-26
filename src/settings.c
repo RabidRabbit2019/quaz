@@ -246,9 +246,9 @@ void settings_init() {
     // частота генератора 140625 * 268435456 / (2^32) = 8789.0625 Гц, 140625 Гц - опорная частота DDS генератора
     // 2^32 - период в 360 градусов
     g_profiles[i].gen_freq = 268435456u;
-    g_profiles[i].level_comp = 512;
+    g_profiles[i].level_comp = 30;
     g_profiles[i].level_sound = 500;
-    g_profiles[i].level_tx = 4096;
+    g_profiles[i].level_tx = 300;
     g_profiles[i].mask_width = 16;
     g_profiles[i].barrier_level = 99;
     g_profiles[i].phase_comp_start = 0;
@@ -317,8 +317,8 @@ bool load_profile( settings_t * a_src ) {
     gen_dds_shutdown();
     adc_shutdown();
     // заново запускаем
-    adc_init();
-    gen_dds_init();
+    adc_startup( ADC_IN_RX );
+    gen_dds_startup();
     return true;
   } else {
     return false;

@@ -392,8 +392,13 @@ static void gui_settings() {
           
           // чтобы определить наличие изменений, проверим CRC32 профиля
           
-          // подключаем канал IN3 АЦП
-          // ADC1->SQR3 = 3 << ADC_SQR3_SQ1_Pos;
+          // подключаем канал IN4 АЦП
+          gen_dds_shutdown();
+          adc_shutdown();
+          delay_ms( 2u );
+          adc_startup( ADC_IN_RX );
+          gen_dds_startup();
+          //
           gui_items();
           g_gui_mode = GUI_MODE_MAIN;
           set_sound_volume( settings_get_current_profile()->level_sound );
@@ -429,8 +434,12 @@ void gui_process() {
 static void mi_tx_gen() {
   // для получения первого значения
   g_tmp = -1;
-  // подключаем канал IN1 АЦП
-  // ADC1->SQR3 = 1 << ADC_SQR3_SQ1_Pos;
+  // подключаем канал IN3 АЦП
+  gen_dds_shutdown();
+  adc_shutdown();
+  delay_ms( 2u );
+  adc_startup( ADC_IN_TX );
+  gen_dds_startup();
   // здесь отрисовка статических элементов экрана
   // строка заголовка
   display_write_string_with_bg(
@@ -530,7 +539,12 @@ static void mi_ferrite() {
 static void mi_power() {
   // для получения первого значения
   g_tmp = -1;
-  // подключаем канал IN0 АЦП
+  // подключаем канал IN2 АЦП
+  gen_dds_shutdown();
+  adc_shutdown();
+  delay_ms( 2u );
+  adc_startup( ADC_IN_ACC );
+  gen_dds_startup();
   // ADC1->SQR3 = 0;
   // строка заголовка
   display_write_string_with_bg(

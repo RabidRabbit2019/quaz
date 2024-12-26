@@ -368,7 +368,7 @@ void set_cm_phase( uint32_t a_phase_diff ) {
 // настройка таймера-2 - генерация "пинков" для ЦАП (cобытие сравнения 1 раз за период частоты 140625)
 // настройка таймера-3 - генерация "пинков" для АЦП (cобытие сравнения 2 раза за период частоты 140625)
 // настройка ЦАП
-void gen_dds_init() {
+void gen_dds_startup() {
   // настройки генераторов из профиля
   settings_t * v_profile = settings_get_current_profile();
   g_level_tx = v_profile->level_tx; // по базовой схеме ~60 мА
@@ -376,20 +376,6 @@ void gen_dds_init() {
   g_level_sound = v_profile->level_sound;
   g_gen_freq = v_profile->gen_freq;
   g_phase_comp = v_profile->phase_comp_start;
-  // включаем тактирование таймеров 1..3 и ЦАП1
-  RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
-  RCC->APB1ENR1 |= (RCC_APB1ENR1_TIM2EN | RCC_APB1ENR1_TIM3EN);
-  RCC->AHB2ENR |= RCC_AHB2ENR_DAC1EN;
-  // включаем выход канала CH1/PA8 (AF6)
-  // alternate push-pull low speed
-  GPIOA->AFR[1] = (GPIOA->AFR[1] & ~GPIO_AFRH_AFSEL8)
-                | (6 << GPIO_AFRH_AFSEL8_Pos)
-                ;
-  GPIOA->OTYPER = (GPIOA->OTYPER & ~GPIO_OTYPER_OT8);
-  GPIOA->OSPEEDR = (GPIOA->OSPEEDR & ~GPIO_OSPEEDR_OSPEED8);
-  GPIOA->MODER = (GPIOA->MODER & ~GPIO_MODER_MODE8)
-               | GPIO_MODER_MODE8_1
-               ;
   // настраиваем таймер-1
   // тактируется от APB2 c множителем 2 (т.к. для APB2 установлен делитель на 2) - 144 МГц
   // ставим предделитель 2, так что таймер в итоге тактируется частотой 72 МГц
@@ -444,7 +430,6 @@ void gen_dds_init() {
              | TIM_SMCR_SMS_2
              ;
   // ЦАП1
-  GPIOA->MODER |= (GPIO_MODER_MODE4 | GPIO_MODER_MODE5);
   DAC1->MCR = DAC_MCR_HFSEL_0;
   DAC1->CR = DAC_CR_TSEL2_2  // dac_ch2_trg4 (TIM2_TRGO)
            | DAC_CR_TEN2
@@ -459,6 +444,28 @@ void gen_dds_init() {
   // генерируем Update Event, чтобы в "теневые" регистры попали текущие значения
   // а в буферные регистры легли новые значения (для следующего периода)
   // TIM1->EGR = TIM_EGR_UG;
+}
+
+
+void gen_dds_init() {
+  // включаем тактирование таймеров 1..3 и ЦАП1
+  RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
+  RCC->APB1ENR1 |= (RCC_APB1ENR1_TIM2EN | RCC_APB1ENR1_TIM3EN);
+  RCC->AHB2ENR |= RCC_AHB2ENR_DAC1EN;
+  // включаем выход канала CH1/PA8 (AF6)
+  // alternate push-pull low speed
+  GPIOA->AFR[1] = (GPIOA->AFR[1] & ~GPIO_AFRH_AFSEL8)
+                | (6 << GPIO_AFRH_AFSEL8_Pos)
+                ;
+  GPIOA->OTYPER = (GPIOA->OTYPER & ~GPIO_OTYPER_OT8);
+  GPIOA->OSPEEDR = (GPIOA->OSPEEDR & ~GPIO_OSPEEDR_OSPEED8);
+  GPIOA->MODER = (GPIOA->MODER & ~GPIO_MODER_MODE8)
+               | GPIO_MODER_MODE8_1
+               ;
+  // ЦАП1
+  GPIOA->MODER |= (GPIO_MODER_MODE4 | GPIO_MODER_MODE5);
+  //
+  gen_dds_startup();
 }
 
 
