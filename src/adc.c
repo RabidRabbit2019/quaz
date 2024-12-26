@@ -74,8 +74,7 @@ void adc_startup( unsigned int a_adc_input ) {
   DMAMUX1_Channel0->CCR = (5 << DMAMUX_CxCR_DMAREQ_ID_Pos);
   // включаем DMA1_Channel1
   DMA1_Channel1->CCR |= DMA_CCR_EN;
-  // настраиваем ADC1, одиночное преобразование (IN4) по триггеру TIM3_TRGO
-  ADC1->CR = 0;
+  // настраиваем ADC1, одиночное преобразование (вход с номером a_adc_input) по триггеру TIM3_TRGO
   ADC1->ISR = ADC_ISR_ADRDY
             | ADC_ISR_EOSMP
             | ADC_ISR_EOC
@@ -88,15 +87,24 @@ void adc_startup( unsigned int a_adc_input ) {
             | ADC_ISR_AWD3
             | ADC_ISR_JQOVF
             ;
-  ADC12_COMMON->CCR = ADC_CCR_CKMODE; // делим 144 МГц (AHB) на 4, получаем 36 МГц
-  ADC1->SMPR1 = ADC_SMPR1_SMP4_1 | ADC_SMPR1_SMP3_1 | ADC_SMPR1_SMP2_1;
+  ADC1->CR |= ADC_CR_ADEN;
+  // ждём включения АЦП1
+  while ( 0 == (ADC1->ISR & ADC_ISR_ADRDY) ) {}
+  ADC1->ISR = ADC_ISR_ADRDY;
+  ADC1->CR &= ~ADC_CR_DEEPPWD;
+  ADC1->CR |= ADC_CR_ADVREGEN;
+  delay_ms( 2u );
+  ADC1->SMPR1 = ADC_SMPR1_SMP4_0 | ADC_SMPR1_SMP4_2
+              | ADC_SMPR1_SMP3_0 | ADC_SMPR1_SMP3_2
+              | ADC_SMPR1_SMP2_0 | ADC_SMPR1_SMP2_2
+              ;
   ADC1->SQR1 = (a_adc_input & 0x1F) << ADC_SQR1_SQ1_Pos;
   ADC1->CFGR = ADC_CFGR_EXTEN_0
              | ADC_CFGR_EXTSEL_2
              | ADC_CFGR_DMACFG
              | ADC_CFGR_DMAEN
              ;
-  ADC1->CR |= ADC_CR_ADEN;
+  // запускаем преобразования
   ADC1->CR |= ADC_CR_ADSTART;
 }
 
@@ -108,13 +116,14 @@ void adc_init() {
              ;
   // включаем тактирование ADC
   RCC->AHB2ENR |= RCC_AHB2ENR_ADC12EN;
-  // включаем тактирование DMA1 (DMAMUX1 включен в main.c)
-  RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;
+  // тактирование DMA1 и DMAMUX1 включено в main.c
   // PA1, PA2, PA3 - аналоговый режим
   GPIOA->MODER |= ( GPIO_MODER_MODE1
                   | GPIO_MODER_MODE2
                   | GPIO_MODER_MODE3
                   );
+  // тактирование АЦП
+  ADC12_COMMON->CCR = ADC_CCR_CKMODE; // делим 144 МГц (AHB) на 4, получаем 36 МГц
   //
   adc_startup( ADC_IN_RX );
 }
@@ -123,6 +132,10 @@ void adc_init() {
 void adc_shutdown() {
   // отключаем прерывание
   __NVIC_DisableIRQ( DMA1_Channel1_IRQn );
+  // останавливаем преобразование
+  ADC1->CR |= ADC_CR_ADSTP;
+  // ждём останова
+  while ( 0 != (ADC1->CR & (ADC_CR_ADSTART | ADC_CR_ADSTP)) ) {}
   // отключаем ADC1
   ADC1->CR |= ADC_CR_ADDIS;
   delay_ms( 2u );

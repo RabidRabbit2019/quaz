@@ -10,6 +10,9 @@
 
 #include <stdio.h>
 
+
+void logBufferInHex(const unsigned char *src, int len);
+
 // STM32G431CBU6 назначение выводов, всё использованное
 // -> АЦП
 // PA1 - ADC12_IN2
@@ -95,6 +98,8 @@ void run() {
   // now clock at 144 MHz, AHB 144 MHz, APB1 72 MHz, APB2 72 MHz
   // DMAMUX1
   RCC->AHB1ENR |= RCC_AHB1ENR_DMAMUX1EN;
+  // включаем тактирование DMA1
+  RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;
   // GPIO
   RCC->AHB2ENR |= ( RCC_AHB2ENR_GPIOAEN
                   | RCC_AHB2ENR_GPIOBEN
@@ -136,14 +141,66 @@ void run() {
   //
   display_write_string_with_bg( 0, 100, 320, 40, "Всем добра!", &font_25_30_font, DISPLAY_COLOR_WHITE, DISPLAY_COLOR_DARKBLUE );
   delay_ms(3000u);
-  // gui_init();
+  gui_init();
   // основной цикл
-  printf( "Hello from WeAct STM32G431CBU6 fat board!\n" );
+  printf( "Hello from WeAct STM32G431CBU6 fat board! " __DATE__ " " __TIME__ "\n" );
+  
+  
   for (;;) {
+    //
     buttons_scan();
-    // gui_process();
+    gui_process();
+    
     //
     GPIOC->ODR ^= GPIO_ODR_OD6;
-    delay_ms( 500u );
+    //
+  }
+}
+
+
+void logBufferInHex(const unsigned char *src, int len) {
+  int i, c, k;
+  char ln[96];
+  char *ucPtr;
+
+  while (len) {
+    // start line pointer
+    ucPtr = ln;
+    // first send address
+    for (i = 28; i >= 0; i -= 4) {
+      c = (((unsigned int)src) >> i) & 0x0F;
+      *ucPtr++ = c < 10 ? c + 48 : c + 55;
+    }
+    // send 16 or less hex bytes
+    for (i = 0; i < 16 && len > 0; i++, len--) {
+      //
+      *ucPtr++ = ' ';
+      //
+      c = (*src >> 4) & 0x0F;
+      *ucPtr++ = c < 10 ? c + 48 : c + 55;
+      c = (*src++) & 0x0F;
+      *ucPtr++ = c < 10 ? c + 48 : c + 55;
+    }
+    for (k = i; k < 16; ++k) {
+      //
+      *ucPtr++ = ' ';
+      *ucPtr++ = ' ';
+      *ucPtr++ = ' ';
+    }
+    //
+    *ucPtr++ = ' ';
+    // send bytes as symbols
+    for (; i > 0; i--) {
+      //
+      c = *(src - i);
+      //
+      *ucPtr++ = (c >= 0x20 && c <= 0x7F) ? c : '.';
+    }
+    // make eol
+    // *ucPtr++ = 0x0D;
+    // *ucPtr++ = 0x0A;
+    *ucPtr = 0x00;
+    // send to remote
+    printf( "%s\n", ln );
   }
 }

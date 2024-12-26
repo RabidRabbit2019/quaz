@@ -10,6 +10,8 @@ release:
 	  settings.c \
 	  display.c \
 	  buttons.c \
+	  calc.c \
+	  gui.c \
 	  fonts/font_bmp.c \
 	  fonts/font_25_30.c \
 	  -ffunction-sections -fdata-sections -mcpu=cortex-m4 -mthumb -lnosys \
@@ -28,6 +30,8 @@ release:
 	  settings.o \
 	  display.o \
 	  buttons.o \
+	  calc.o \
+	  gui.o \
 	  font_bmp.o \
 	  font_25_30.o \
 	  -Wl,-gc-sections -mcpu=cortex-m4 -mthumb -lnosys -nostartfiles -ffreestanding \
@@ -44,6 +48,8 @@ debug:
 	  settings.c \
 	  display.c \
 	  buttons.c \
+	  calc.c \
+	  gui.c \
 	  fonts/font_bmp.c \
 	  fonts/font_25_30.c \
 	  -ffunction-sections -fdata-sections -mcpu=cortex-m4 -mthumb -lnosys -nostartfiles \
@@ -58,6 +64,8 @@ debug:
 	  settings.o \
 	  display.o \
 	  buttons.o \
+	  calc.o \
+	  gui.o \
 	  font_bmp.o \
 	  font_25_30.o \
 	  -Wl,-gc-sections -mcpu=cortex-m4 -mthumb -lnosys -nostartfiles -ffreestanding \
