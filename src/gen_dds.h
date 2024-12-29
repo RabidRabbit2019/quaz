@@ -15,6 +15,8 @@
 #define MAX_CM_LEVEL        2048u
 #define MIN_CM_LEVEL        1u
 
+#define DAC_FULL_SCALE      4096u
+
 
 void gen_dds_init();
 void gen_dds_startup();

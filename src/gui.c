@@ -11,9 +11,9 @@
 
 
 #define VDI_LINES_HEIGHT    90
-#define VDI_SECTOR_DEGREES  8
+#define VDI_SECTOR_DEGREES  9
 #define VDI_LINES_WIDTH     (DISPLAY_WIDTH*VDI_SECTOR_DEGREES/360)
-#define VDI_FFT_COLOR       0x07
+#define VDI_FFT_COLOR       DISPLAY_BYTE_COLOR_GREEN
 
 #define GUI_MODE_MAIN       0
 #define GUI_MODE_SETTINGS   1
@@ -221,7 +221,7 @@ static void gui_main() {
   set_sound_freq_by_angle( (uint32_t)(v_d / 65536) );
   // вычислим номер колонки в зависимости от угла
   v_column = (v_d / VDI_SECTOR_DEGREES) / 65536;
-  // вычисли высоту колонки в зависимости от "силы отклика"
+  // вычислим высоту колонки в зависимости от "силы отклика"
   int v_height = (log2_32( (uint32_t)v_len ) * 15) / 2;
   if ( v_height > VDI_LINES_HEIGHT ) {
     v_height = VDI_LINES_HEIGHT;
@@ -529,6 +529,46 @@ static void mi_rx_balance() {
 
 
 static void mi_mask() {
+  settings_t * v_current_profile = settings_get_current_profile();
+  uint32_t v_y_offset = 0;
+  // строка заголовка
+  display_write_string_with_bg(
+        0, 0
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , g_top_menu[MENU_ITEM_MASK].name
+      , &font_25_30_font
+      , DISPLAY_COLOR_YELLOW
+      , DISPLAY_COLOR_MIDBLUE
+      );
+  v_y_offset += font_25_30_font.m_row_height;
+  // рисуем полосу на 360 градусов и маску, ширина маски в градусах
+  // вычмсляем ширины маски в пикселях
+  uint32_t v_mask_width = v_current_profile->mask_width * VDI_LINES_WIDTH / VDI_SECTOR_DEGREES;
+  // сектор макси
+  display_fill_rectangle_dma_fast(
+        0, v_y_offset
+      , v_mask_width, VDI_LINES_HEIGHT
+      , DISPLAY_BYTE_COLOR_DARK_GREEN
+      );
+  // сектор озвучки
+  display_fill_rectangle_dma_fast(
+        v_mask_width, v_y_offset
+      , DISPLAY_WIDTH - v_mask_width
+      , VDI_LINES_HEIGHT
+      , VDI_FFT_COLOR
+      );
+  v_y_offset += VDI_LINES_HEIGHT;
+  // ширина сектора маски в градусах
+  char v_str[32];
+  snprintf( v_str, sizeof(v_str), "%u", (unsigned int)v_current_profile->mask_width );
+  display_write_string_with_bg(
+        0, v_y_offset
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , v_str
+      , &font_25_30_font
+      , DISPLAY_COLOR_WHITE
+      , DISPLAY_COLOR_DARKGRAY
+      );
 }
 
 
@@ -911,6 +951,59 @@ static void mh_rx_balance() {
 
 
 static void mh_mask() {
+  settings_t * v_settings = settings_get_current_profile();
+  // кнопки
+  uint32_t v_changed = get_changed_buttons();
+  uint32_t v_buttons = get_buttons_state();
+  if ( 0 != v_changed ) {
+    // кнопки "+" и "-" - изменение ширины маски
+    if ( 0 != (v_changed & BT_INC_mask) && 0 == (v_buttons & BT_INC_mask) ) {
+      // нажата кнопка "+", увеличиваем ширину маски
+      if ( v_settings->mask_width < 360 ) {
+        ++v_settings->mask_width;
+      }
+    }
+    if ( 0 != (v_changed & BT_DEC_mask) && 0 == (v_buttons & BT_DEC_mask) ) {
+      // нажата кнопка "-"
+      if ( v_settings->mask_width > 0 ) {
+        --v_settings->mask_width;
+      }
+    }
+    // кнопка "ОК" - выход из настройки
+    if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
+      // нажата кнопка "OK"
+      back_to_settings( MENU_ITEM_MASK );
+    }
+    uint32_t v_y_offset = font_25_30_font.m_row_height;
+    // рисуем полосу на 360 градусов и маску, ширина маски в градусах
+    // вычмсляем ширины маски в пикселях
+    uint32_t v_mask_width = v_settings->mask_width * VDI_LINES_WIDTH / VDI_SECTOR_DEGREES;
+    // сектор маски
+    display_fill_rectangle_dma_fast(
+          0, v_y_offset
+        , v_mask_width, VDI_LINES_HEIGHT
+        , DISPLAY_BYTE_COLOR_DARK_GREEN
+        );
+    // сектор озвучки
+    display_fill_rectangle_dma_fast(
+          v_mask_width, v_y_offset
+        , DISPLAY_WIDTH - v_mask_width
+        , VDI_LINES_HEIGHT
+        , VDI_FFT_COLOR
+        );
+    v_y_offset += VDI_LINES_HEIGHT;
+    // ширина сектора маски в градусах
+    char v_str[32];
+    snprintf( v_str, sizeof(v_str), "%u", (unsigned int)v_settings->mask_width );
+    display_write_string_with_bg(
+          0, v_y_offset
+        , DISPLAY_WIDTH, font_25_30_font.m_row_height
+        , v_str
+        , &font_25_30_font
+        , DISPLAY_COLOR_WHITE
+        , DISPLAY_COLOR_DARKGRAY
+        );
+  }
 }
 
 
@@ -969,7 +1062,7 @@ static void mh_power() {
     // кнопка "ОК" - выход из настройки
     if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
       // нажата кнопка "OK"
-      back_to_settings( MENU_ITEM_TX_POWER );
+      back_to_settings( MENU_ITEM_BATTERY );
     }
   }
 }

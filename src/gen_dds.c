@@ -280,8 +280,12 @@ static volatile uint32_t g_phase_comp = 0;
 static uint32_t g_phase_sound = 0;
 // уровень выходного сигнала TX [0..256]
 static volatile uint32_t g_level_tx = 0;
+// смещение для центрирования сигнала в диапазоне значений для ЦАП
+// т.к. используется буферный ОУ, который не может работать от нуля
+static uint32_t g_dac_offset_tx = 0;
 // уровень выходного сигнала компенсации разбаланса [0..256]
 static volatile uint32_t g_level_comp = 0;
+static uint32_t g_dac_offset_comp = 0;
 // уровень громкости звука [0...256]
 static volatile uint32_t g_level_sound = 0;
 // частота (сдвиг фазы генератора) TX и сигнала компенсации
@@ -324,6 +328,7 @@ void set_tx_level( uint32_t a_level ) {
     }
   }
   g_level_tx = a_level;
+  g_dac_offset_tx = (DAC_FULL_SCALE - a_level) / 2;
 }
 
 
@@ -336,6 +341,7 @@ void set_cm_level( uint32_t a_level ) {
     }
   }
   g_level_comp = a_level;
+  g_dac_offset_comp = (DAC_FULL_SCALE - a_level) / 2u;
 }
 
 
@@ -372,7 +378,9 @@ void gen_dds_startup() {
   // настройки генераторов из профиля
   settings_t * v_profile = settings_get_current_profile();
   g_level_tx = v_profile->level_tx; // по базовой схеме ~60 мА
+  g_dac_offset_tx = (DAC_FULL_SCALE - g_level_tx) / 2u;
   g_level_comp = v_profile->level_comp;
+  g_dac_offset_comp = (DAC_FULL_SCALE - g_level_comp) / 2u;
   g_level_sound = v_profile->level_sound;
   g_gen_freq = v_profile->gen_freq;
   g_phase_comp = v_profile->phase_comp_start;
@@ -489,7 +497,9 @@ void gen_dds_shutdown() {
   g_phase_comp = 0;
   g_phase_sound = 0;
   g_level_tx = 0;
+  g_dac_offset_tx = DAC_FULL_SCALE / 2u;
   g_level_comp = 0;
+  g_dac_offset_comp = DAC_FULL_SCALE / 2u;
   g_level_sound = 0;
   g_gen_freq = 0;
   g_sound_freq = 0;
@@ -502,11 +512,11 @@ void ih_TIM1_UP_TIM16_IRQ() {
   // подвинем фазу
   g_phase_tx += g_gen_freq;
   // значение косинуса берём из таблицы
-  uint32_t v_dac = (g_cos_table_dac[g_phase_tx >> 22] * g_level_tx) >> 12;
+  uint32_t v_dac = g_dac_offset_tx + ((g_cos_table_dac[g_phase_tx >> 22] * g_level_tx) >> 12);
   // подвинем фазу
   g_phase_comp += g_gen_freq;
   // значение косинуса из таблицы
-  v_dac |= ((g_cos_table_dac[g_phase_comp >> 22] * g_level_comp) >> 12) << 16;
+  v_dac |= (g_dac_offset_comp + ((g_cos_table_dac[g_phase_comp >> 22] * g_level_comp) >> 12)) << 16;
   DAC1->DHR12RD = v_dac;
   // подвинем фазу
   g_phase_sound += g_sound_freq;

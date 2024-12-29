@@ -193,6 +193,10 @@ static void display_set_addr_window_dma( uint16_t x, uint16_t y, uint16_t w, uin
 // подготавливается буфер размером w пикселов
 // и далее через DMA отправляется h раз
 void display_fill_rectangle_dma( uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color ) {
+  // проверка на нулевые размеры
+  if ( 0 == w || 0 == h ) {
+    return;
+  }
   // clipping
   if((x >= DISPLAY_WIDTH) || (y >= DISPLAY_HEIGHT)) return;
   if((x + w - 1) >= DISPLAY_WIDTH) {
@@ -225,6 +229,10 @@ void display_fill_rectangle_dma( uint16_t x, uint16_t y, uint16_t w, uint16_t h,
 // здесь буфер не требуется, через DMA сразу передаются все пиксели прямоугольника
 // соответственно, адрес источника в памяти не меняется, т.е. передаётся один байт color
 void display_fill_rectangle_dma_fast( uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t color ) {
+  // проверка на нулевые размеры
+  if ( 0 == w || 0 == h ) {
+    return;
+  }
   // clipping
   if((x >= DISPLAY_WIDTH) || (y >= DISPLAY_HEIGHT)) return;
   if((x + w - 1) >= DISPLAY_WIDTH) {
