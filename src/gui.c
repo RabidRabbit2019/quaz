@@ -393,7 +393,7 @@ static void gui_settings() {
           // чтобы определить наличие изменений, проверим CRC32 профиля
           
           // подключаем канал IN3 АЦП
-          ADC1->SQR3 = 3 << ADC_SQR3_SQ1_Pos;
+          adc_select_channel( ADC_IN_RX );
           gui_items();
           g_gui_mode = GUI_MODE_MAIN;
           set_sound_volume( settings_get_current_profile()->level_sound );
@@ -430,7 +430,7 @@ static void mi_tx_gen() {
   // для получения первого значения
   g_tmp = -1;
   // подключаем канал IN1 АЦП
-  ADC1->SQR3 = 1 << ADC_SQR3_SQ1_Pos;
+  adc_select_channel( ADC_IN_ACC );
   // здесь отрисовка статических элементов экрана
   // строка заголовка
   display_write_string_with_bg(

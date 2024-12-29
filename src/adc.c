@@ -39,16 +39,9 @@ uint16_t * adc_get_buffer() {
   return g_adc_buffer_flag ? g_adc_buffer : (g_adc_buffer + ADC_SAMPLES_COUNT);
 }
 
-// ADC1 работает по событию TIM1_CC3
-// буфер на ADC_SAMPLES_COUNT*2 значений, по прерываниям половины буфера и полного буфера
-// запоминается фаза DDS генератора TX
-// частота ADC 9 МГц, sample_time = 13.5 тактов, время преобразования (13.5+12.5)/9000000 ~= 2.9 мкс
-// при этом период выборки 256/72000000 ~= 3.6 мкс, т.е. АЦП всё успевает
-void adc_init() {
-  GPIOA->CRL &= ~( GPIO_CRL_MODE3 | GPIO_CRL_CNF3
-                 | GPIO_CRL_MODE1 | GPIO_CRL_CNF1
-                 | GPIO_CRL_MODE0 | GPIO_CRL_CNF0
-                 );
+
+//
+void adc_startup( int a_channel ) {
   // настраиваем канал 1 DMA для получения данных от АЦП
   DMA1_Channel1->CCR = 0;
   DMA1_Channel1->CPAR = (uint32_t)&ADC1->DR;
@@ -73,7 +66,7 @@ void adc_init() {
   // настраиваем ADC1, одиночное преобразование (IN3) по триггеру TIM3_TRGO
   ADC1->SMPR2 = ADC_SMPR2_SMP3_1 | ADC_SMPR2_SMP1_1 | ADC_SMPR2_SMP0_1;
   ADC1->SQR1 = 0;
-  ADC1->SQR3 = 3 << ADC_SQR3_SQ1_Pos;
+  ADC1->SQR3 = (a_channel << ADC_SQR3_SQ1_Pos) & ADC_SQR3_SQ1;
   ADC1->SR = 0;
   ADC1->CR1 = ADC_CR1_SCAN;
   ADC1->CR2 = ADC_CR2_EXTTRIG
@@ -81,6 +74,20 @@ void adc_init() {
             | ADC_CR2_DMA
             | ADC_CR2_ADON
             ;
+}
+
+
+// ADC1 работает по событию TIM1_CC3
+// буфер на ADC_SAMPLES_COUNT*2 значений, по прерываниям половины буфера и полного буфера
+// запоминается фаза DDS генератора TX
+// частота ADC 9 МГц, sample_time = 13.5 тактов, время преобразования (13.5+12.5)/9000000 ~= 2.9 мкс
+// при этом период выборки 256/72000000 ~= 3.6 мкс, т.е. АЦП всё успевает
+void adc_init() {
+  GPIOA->CRL &= ~( GPIO_CRL_MODE3 | GPIO_CRL_CNF3
+                 | GPIO_CRL_MODE1 | GPIO_CRL_CNF1
+                 | GPIO_CRL_MODE0 | GPIO_CRL_CNF0
+                 );
+  adc_startup( ADC_IN_RX );
 }
 
 
@@ -137,4 +144,14 @@ void ih_DMA1_Channel1_IRQ() {
              | DMA_IFCR_CTEIF1
              | DMA_IFCR_CGIF1
              ;
+}
+
+
+//
+void adc_select_channel( int a_channel ) {
+  gen_dds_shutdown();
+  adc_shutdown();
+  ADC1->SQR3 = (a_channel << ADC_SQR3_SQ1_Pos) & ADC_SQR3_SQ1;
+  adc_init();
+  gen_dds_init();
 }
