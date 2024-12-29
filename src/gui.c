@@ -11,9 +11,9 @@
 
 
 #define VDI_LINES_HEIGHT    90
-#define VDI_SECTOR_DEGREES  8
+#define VDI_SECTOR_DEGREES  9
 #define VDI_LINES_WIDTH     (DISPLAY_WIDTH*VDI_SECTOR_DEGREES/360)
-#define VDI_FFT_COLOR       0x07
+#define VDI_FFT_COLOR       DISPLAY_BYTE_COLOR_GREEN
 
 #define GUI_MODE_MAIN       0
 #define GUI_MODE_SETTINGS   1
@@ -31,6 +31,11 @@
 #define MAX_VOLTMETER_K_VALUE   131072u
 #define MIN_VOLTMETER_K_VALUE   1u
 
+// таймаут на калибровку по ферриту 30 секунд (30000 миллисекунд)
+#define FERRITE_CALIB_TIMEOUT   30000u
+
+
+extern volatile uint32_t g_milliseconds;
 
 static int g_gui_mode = GUI_MODE_MAIN;
 
@@ -44,6 +49,7 @@ static int g_menu_level = 0; // 0 - корневое меню
 static int g_menu_item = 0; // 0 - вернуться обратно
 
 static int g_tmp = 0;
+static uint32_t g_tmp_ui32 = 0;
 static settings_t * g_profiles_ptr[PROFILES_COUNT]; // адреса сохранённых профилей, NULL - профиль отсутствует
 
 static void mi_tx_gen();
@@ -221,7 +227,7 @@ static void gui_main() {
   set_sound_freq_by_angle( (uint32_t)(v_d / 65536) );
   // вычислим номер колонки в зависимости от угла
   v_column = (v_d / VDI_SECTOR_DEGREES) / 65536;
-  // вычисли высоту колонки в зависимости от "силы отклика"
+  // вычислим высоту колонки в зависимости от "силы отклика"
   int v_height = (log2_32( (uint32_t)v_len ) * 15) / 2;
   if ( v_height > VDI_LINES_HEIGHT ) {
     v_height = VDI_LINES_HEIGHT;
@@ -392,8 +398,9 @@ static void gui_settings() {
           
           // чтобы определить наличие изменений, проверим CRC32 профиля
           
-          // подключаем канал IN3 АЦП
+          // подключаем канал IN4 АЦП
           adc_select_channel( ADC_IN_RX );
+          //
           gui_items();
           g_gui_mode = GUI_MODE_MAIN;
           set_sound_volume( settings_get_current_profile()->level_sound );
@@ -429,8 +436,8 @@ void gui_process() {
 static void mi_tx_gen() {
   // для получения первого значения
   g_tmp = -1;
-  // подключаем канал IN1 АЦП
-  adc_select_channel( ADC_IN_ACC );
+  // подключаем канал IN3 АЦП
+  adc_select_channel( ADC_IN_TX );
   // здесь отрисовка статических элементов экрана
   // строка заголовка
   display_write_string_with_bg(
@@ -513,25 +520,106 @@ static void rx_balance_init_screen() {
 
 
 static void mi_rx_balance() {
+  adc_select_channel( ADC_IN_RX );
   rx_balance_init_screen();
   // для получения первого значения
   g_tmp = -1;
 }
 
 
+static void mask_init_screen() {
+  settings_t * v_settings = settings_get_current_profile();
+  uint32_t v_y_offset = font_25_30_font.m_row_height;
+  // рисуем полосу на 360 градусов и маску, ширина маски в градусах
+  // вычмсляем ширины маски в пикселях
+  uint32_t v_mask_width = v_settings->mask_width * VDI_LINES_WIDTH / VDI_SECTOR_DEGREES;
+  // сектор маски
+  display_fill_rectangle_dma_fast(
+        0, v_y_offset
+      , v_mask_width, VDI_LINES_HEIGHT
+      , DISPLAY_BYTE_COLOR_DARK_GREEN
+      );
+  // сектор озвучки
+  display_fill_rectangle_dma_fast(
+        v_mask_width, v_y_offset
+      , DISPLAY_WIDTH - v_mask_width
+      , VDI_LINES_HEIGHT
+      , VDI_FFT_COLOR
+      );
+  v_y_offset += VDI_LINES_HEIGHT;
+  // ширина сектора маски в градусах
+  snprintf( g_str, sizeof(g_str), "%u", (unsigned int)v_settings->mask_width );
+  display_write_string_with_bg(
+        0, v_y_offset
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , g_str
+      , &font_25_30_font
+      , DISPLAY_COLOR_WHITE
+      , DISPLAY_COLOR_DARKGRAY
+      );
+}
+
+
 static void mi_mask() {
+  // строка заголовка
+  display_write_string_with_bg(
+        0, 0
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , g_top_menu[MENU_ITEM_MASK].name
+      , &font_25_30_font
+      , DISPLAY_COLOR_YELLOW
+      , DISPLAY_COLOR_MIDBLUE
+      );
+  //
+  mask_init_screen();
 }
 
 
 static void mi_ferrite() {
+  // запоминаем время захода в калиброку
+  g_tmp_ui32 = g_milliseconds;
+  // выбираем канал АЦП от датчика
+  adc_select_channel( ADC_IN_ACC );
+  // строка заголовка
+  display_write_string_with_bg(
+        0, 0
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , g_top_menu[MENU_ITEM_FERRITE].name
+      , &font_25_30_font
+      , DISPLAY_COLOR_YELLOW
+      , DISPLAY_COLOR_MIDBLUE
+      );
+  // зачистка под текст
+  display_fill_rectangle_dma_fast(
+        0, font_25_30_font.m_row_height
+      , DISPLAY_WIDTH, DISPLAY_HEIGHT - font_25_30_font.m_row_height
+      , DISPLAY_BYTE_COLOR_BLACK
+      );
+  // текст
+  display_write_string(
+        0, font_25_30_font.m_row_height
+      , "Поднесите кусочек феррита к датчику, затем уберите его. Повторите 4 раза. На всё про всё 30 секунд."
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , DISPLAY_COLOR_BLACK
+      );
+  // счётчик поднесений
+  display_write_string_with_bg(
+        0, DISPLAY_HEIGHT - font_25_30_font.m_row_height
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , "Феррит поднесён: 0"
+      , &font_25_30_font
+      , DISPLAY_COLOR_GREEN
+      , DISPLAY_COLOR_DARKGREEN
+      );
 }
 
 
 static void mi_power() {
   // для получения первого значения
   g_tmp = -1;
-  // подключаем канал IN0 АЦП
-  ADC1->SQR3 = 0;
+  // подключаем канал IN2 АЦП
+  adc_select_channel( ADC_IN_ACC );
   // строка заголовка
   display_write_string_with_bg(
         0, 0
@@ -897,10 +985,52 @@ static void mh_rx_balance() {
 
 
 static void mh_mask() {
+  settings_t * v_settings = settings_get_current_profile();
+  // кнопки
+  uint32_t v_changed = get_changed_buttons();
+  uint32_t v_buttons = get_buttons_state();
+  if ( 0 != v_changed ) {
+    // кнопки "+" и "-" - изменение ширины маски
+    if ( 0 != (v_changed & BT_INC_mask) && 0 == (v_buttons & BT_INC_mask) ) {
+      // нажата кнопка "+", увеличиваем ширину маски
+      if ( v_settings->mask_width < 360 ) {
+        ++v_settings->mask_width;
+      }
+    }
+    if ( 0 != (v_changed & BT_DEC_mask) && 0 == (v_buttons & BT_DEC_mask) ) {
+      // нажата кнопка "-"
+      if ( v_settings->mask_width > 0 ) {
+        --v_settings->mask_width;
+      }
+    }
+    // кнопка "ОК" - выход из настройки
+    if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
+      // нажата кнопка "OK"
+      back_to_settings( MENU_ITEM_MASK );
+      return;
+    }
+    //
+    mask_init_screen();
+  }
 }
 
 
 static void mh_ferrite() {
+  // проверим длительность
+  if ( ((uint32_t)(g_milliseconds - g_tmp_ui32)) >= FERRITE_CALIB_TIMEOUT ) {
+    display_write_string_with_bg(
+          0, DISPLAY_HEIGHT / 4
+        , DISPLAY_WIDTH, DISPLAY_HEIGHT / 2
+        , "Время вышло"
+        , &font_25_30_font
+        , DISPLAY_COLOR_WHITE
+        , DISPLAY_COLOR_MIDRED
+        );
+    //
+    delay_ms( 2000u );
+    back_to_settings( MENU_ITEM_FERRITE );
+    return;
+  }
 }
 
 
@@ -955,7 +1085,7 @@ static void mh_power() {
     // кнопка "ОК" - выход из настройки
     if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
       // нажата кнопка "OK"
-      back_to_settings( MENU_ITEM_TX_POWER );
+      back_to_settings( MENU_ITEM_BATTERY );
     }
   }
 }

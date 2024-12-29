@@ -464,6 +464,14 @@ void display_write_string_with_bg(
   int v_str_width = 0;
   int v_str_height = 0;
   get_text_extent( a_fnt, a_str, &v_str_width, &v_str_height );
+  // если область текста по высоте больше чем высота прямоугольника вывода, то на выход
+  if ( v_str_height > a_height ) {
+    return;
+  }
+  // если высота текста меньше высоты прямоугольника вывода, рисуем прямоугольник под фон
+  if ( v_str_height < a_height ) {
+    display_fill_rectangle_dma( a_x, a_y, a_width, a_height, a_bgcolor );
+  }
   // start column for first symbol
   int v_start_str_column = (a_width - v_str_width) / 2;
   if ( v_start_str_column < 0 ) {
@@ -510,7 +518,10 @@ void display_write_string_with_bg(
   display_select();
 
   // display region as entire rectangle
-  display_set_addr_window_dma( a_x, a_y, a_width, a_height );
+  if ( v_str_height < a_height ) {
+    a_y += (a_height - v_str_height) / 2;
+  }
+  display_set_addr_window_dma( a_x, a_y, a_width, v_str_height );
 
   // line by line double buffered display
   uint16_t * start_line_buf1 = line_buf1 + v_start_str_column;
