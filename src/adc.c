@@ -188,3 +188,13 @@ void ih_DMA1_Channel1_IRQ() {
              | DMA_IFCR_CGIF1
              ;
 }
+
+
+// установка канала
+void adc_select_channel( int a_channel ) {
+  gen_dds_shutdown();
+  adc_shutdown();
+  delay_ms( 2u );
+  adc_startup( a_channel );
+  gen_dds_startup();
+}

@@ -13,6 +13,7 @@
 void adc_init();
 void adc_startup( unsigned int a_adc_input );
 void adc_shutdown();
+void adc_select_channel( int );
 
 
 bool adc_buffer_flag();
