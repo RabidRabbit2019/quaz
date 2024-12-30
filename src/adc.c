@@ -12,6 +12,11 @@ uint16_t g_adc_buffer[ADC_SAMPLES_COUNT*2];
 uint32_t g_tx_phase_1 = 0;
 uint32_t g_tx_phase_2 = 0;
 
+// буфер для значений от вольтметра и от миллиамперметра
+// отсчёты для каналов ADC12_IN1 и ADC12_IN2 лежат в буфере последовательно
+// количество пар = ADC2_SAMPLES_COUNT/2
+uint16_t g_adc2_buffer[ADC2_SAMPLES_COUNT];
+
 // false - заполнилась вторая половина буфера
 // true - заполнилась первая половина буфера
 volatile bool g_adc_buffer_flag = false;
@@ -44,8 +49,9 @@ uint16_t * adc_get_buffer() {
 // запоминается фаза DDS генератора TX
 // частота ADC 36 МГц, sample_time = 92.5 тактов, время преобразования (92.5+12.5)/36000000 ~= 2.9 мкс
 // при этом период выборки 256/72000000 ~= 3.6 мкс, т.е. АЦП всё успевает
-// ADC12_IN2     PA1 - контроль напряжения питания
-// ADC1_IN3      PA2 - контроль тока в контуре TX
+// ADC2 работает в режиме непрерывного преобразования от двух входов
+// ADC12_IN1     PA0 - контроль напряжения питания
+// ADC12_IN2     PA1 - контроль тока в выходном контуре
 // ADC1_IN4      PA3 - сигнал от входного усилителя
 
 
@@ -60,6 +66,7 @@ void adc_startup( unsigned int a_adc_input ) {
              | DMA_IFCR_CGIF1
              ;
   DMA1_Channel1->CNDTR = ADC_SAMPLES_COUNT*2;
+  // канал с наивысшим приоритетом
   DMA1_Channel1->CCR = DMA_CCR_PL
                      | DMA_CCR_MSIZE_0
                      | DMA_CCR_PSIZE_0
@@ -74,8 +81,6 @@ void adc_startup( unsigned int a_adc_input ) {
   DMAMUX1_Channel0->CCR = (5 << DMAMUX_CxCR_DMAREQ_ID_Pos);
   // включаем DMA1_Channel1
   DMA1_Channel1->CCR |= DMA_CCR_EN;
-  // тактирование АЦП
-  ADC12_COMMON->CCR = ADC_CCR_CKMODE; // делим 144 МГц (AHB) на 4, получаем 36 МГц
   // настраиваем ADC1, одиночное преобразование (вход с номером a_adc_input) по триггеру TIM3_TRGO
   ADC1->ISR = ADC_ISR_ADRDY
             | ADC_ISR_EOSMP
@@ -118,14 +123,72 @@ void adc_init() {
              ;
   // включаем тактирование ADC
   RCC->AHB2ENR |= RCC_AHB2ENR_ADC12EN;
+  // тактирование АЦП
+  ADC12_COMMON->CCR = ADC_CCR_CKMODE; // делим 144 МГц (AHB) на 4, получаем 36 МГц
   // тактирование DMA1 и DMAMUX1 включено в main.c
-  // PA1, PA2, PA3 - аналоговый режим
-  GPIOA->MODER |= ( GPIO_MODER_MODE1
-                  | GPIO_MODER_MODE2
+  // PA0, PA1, PA3 - аналоговый режим
+  GPIOA->MODER |= ( GPIO_MODER_MODE0
+                  | GPIO_MODER_MODE1
                   | GPIO_MODER_MODE3
                   );
   //
   adc_startup( ADC_IN_RX );
+  // теперь запустим ADC2 для получения значений для вольтметра и миллиамперметра
+  // PA0 - ADC12_IN1 - вольтметр
+  // PA1 - ADC12_IN2 - миллиамперметр
+  // настраиваем канал 4 DMA для получения данных от АЦП2
+  DMA1_Channel4->CCR = 0;
+  DMA1_Channel4->CPAR = (uint32_t)&ADC2->DR;
+  DMA1_Channel4->CMAR = (uint32_t)g_adc2_buffer;
+  DMA1->IFCR = DMA_IFCR_CTCIF4
+             | DMA_IFCR_CHTIF4
+             | DMA_IFCR_CTEIF4
+             | DMA_IFCR_CGIF4
+             ;
+  DMA1_Channel4->CNDTR = ADC2_SAMPLES_COUNT;
+  // канал с низшим приоритетом
+  DMA1_Channel4->CCR = DMA_CCR_MSIZE_0
+                     | DMA_CCR_PSIZE_0
+                     | DMA_CCR_MINC
+                     | DMA_CCR_CIRC
+                     ;
+  // настраиваем DMAMUX1_Channel3, запрос от ADC2 (resource input #36)
+  DMAMUX1_Channel3->CCR = (36 << DMAMUX_CxCR_DMAREQ_ID_Pos);
+  // включаем DMA1_Channel4
+  DMA1_Channel4->CCR |= DMA_CCR_EN;
+  // настраиваем ADC2, непрерывное преобразование с двух входов
+  ADC2->ISR = ADC_ISR_ADRDY
+            | ADC_ISR_EOSMP
+            | ADC_ISR_EOC
+            | ADC_ISR_EOS
+            | ADC_ISR_OVR
+            | ADC_ISR_JEOC
+            | ADC_ISR_JEOS
+            | ADC_ISR_AWD1
+            | ADC_ISR_AWD2
+            | ADC_ISR_AWD3
+            | ADC_ISR_JQOVF
+            ;
+  ADC2->CR |= ADC_CR_ADEN;
+  // ждём включения АЦП2
+  while ( 0 == (ADC2->ISR & ADC_ISR_ADRDY) ) {}
+  ADC2->ISR = ADC_ISR_ADRDY;
+  ADC2->CR &= ~ADC_CR_DEEPPWD;
+  ADC2->CR |= ADC_CR_ADVREGEN;
+  delay_ms( 2u );
+  ADC2->SMPR1 = ADC_SMPR1_SMP2_2 | ADC_SMPR1_SMP2_1
+              | ADC_SMPR1_SMP1_2 | ADC_SMPR1_SMP1_1
+              ;
+  ADC2->SQR1 = (1 << ADC_SQR1_SQ1_Pos)
+             | (2 << ADC_SQR1_SQ2_Pos)
+             | ADC_SQR1_L_0
+             ;
+  ADC2->CFGR = ADC_CFGR_CONT
+             | ADC_CFGR_DMACFG
+             | ADC_CFGR_DMAEN
+             ;
+  // запускаем преобразования
+  ADC2->CR |= ADC_CR_ADSTART;
 }
 
 
@@ -197,4 +260,10 @@ void adc_select_channel( int a_channel ) {
   delay_ms( 2u );
   adc_startup( a_channel );
   gen_dds_startup();
+}
+
+
+//
+uint16_t * adc_get_meters() {
+  return g_adc2_buffer;
 }

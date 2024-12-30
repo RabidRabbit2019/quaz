@@ -5,9 +5,11 @@
 #include <stdint.h>
 
 #define ADC_SAMPLES_COUNT   256
+#define ADC2_SAMPLES_COUNT  256
 
 #define ADC_IN_RX     4
-#define ADC_IN_TX     3
+
+#define ADC_IN_TX     1
 #define ADC_IN_ACC    2
 
 void adc_init();
@@ -20,6 +22,7 @@ bool adc_buffer_flag();
 bool adc_error_flag();
 uint16_t * adc_get_buffer();
 int adc_get_tx_phase();
+uint16_t * adc_get_meters();
 
 
 #endif // __ADC_H__

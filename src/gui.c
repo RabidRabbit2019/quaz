@@ -21,9 +21,8 @@
 #define MAIN_ITEM_MIN       0
 #define MAIN_ITEM_BARRIER   0
 #define MAIN_ITEM_VOLUME    1
-#define MAIN_ITEM_FERRITE   2
-#define MAIN_ITEM_GROUND    3
-#define MAIN_ITEM_MAX       3
+#define MAIN_ITEM_GROUND    2
+#define MAIN_ITEM_MAX       2
 
 #define MAX_BARRIER_VALUE   999u
 #define MIN_BARRIER_VALUE   1u
@@ -31,6 +30,11 @@
 #define MAX_VOLTMETER_K_VALUE   131072u
 #define MIN_VOLTMETER_K_VALUE   1u
 
+// таймаут на калибровку по ферриту 30 секунд (30000 миллисекунд)
+#define FERRITE_CALIB_TIMEOUT   30000u
+
+
+extern volatile uint32_t g_milliseconds;
 
 static int g_gui_mode = GUI_MODE_MAIN;
 
@@ -43,7 +47,10 @@ static int g_main_item = 0;
 static int g_menu_level = 0; // 0 - корневое меню
 static int g_menu_item = 0; // 0 - вернуться обратно
 
+static int g_vm = -1;
+static int g_mam = -1;
 static int g_tmp = 0;
+static uint32_t g_tmp_ui32 = 0;
 static settings_t * g_profiles_ptr[PROFILES_COUNT]; // адреса сохранённых профилей, NULL - профиль отсутствует
 
 static void mi_tx_gen();
@@ -98,6 +105,63 @@ static const menu_item_t g_top_menu[] = {
 void delay_ms( uint32_t a_ms );
 
 
+static int filter_value( int * a_base, int a_new ) {
+  if ( -1 == *a_base ) {
+    *a_base = a_new;
+  } else {
+    *a_base = (a_new / 16) + ((*a_base * 15) / 16);
+  }
+  return *a_base;
+}
+
+
+static int get_mam_value() {
+  // массив с данными вольтметра и миллиамперметра
+  uint16_t * v_ptr = adc_get_meters();
+  int v_mam_min = 5000;
+  int v_mam_max = 0;
+  // проходимся по массиву значений
+  for ( int i = 0; i < (ADC2_SAMPLES_COUNT/2); ++i ) {
+    // данные вольтметра пропускаем
+    ++v_ptr;
+    // для миллиамперметра минимальное/максимальное значения
+    // чтобы получить размах сигнала
+    if ( *v_ptr > v_mam_max ) {
+      v_mam_max = *v_ptr;
+    }
+    if ( *v_ptr < v_mam_min ) {
+      v_mam_min = *v_ptr;
+    }
+    ++v_ptr;
+  }
+  // для миллиамперметра значение размаха
+  if ( v_mam_max < v_mam_min ) {
+    v_mam_max = v_mam_min;
+  }
+  return filter_value( &g_mam, v_mam_max - v_mam_min );
+}
+
+
+static int get_vm_value() {
+  settings_t * v_settings = settings_get_current_profile();
+  // массив с данными вольтметра и миллиамперметра
+  uint16_t * v_ptr = adc_get_meters();
+  int v_vm = 0;
+  // проходимся по массиву значений
+  for ( int i = 0; i < (ADC2_SAMPLES_COUNT/2); ++i ) {
+    // для вольтметра просто суммируем
+    v_vm += *v_ptr++;
+    // данные миллиамперметра пропускаем
+    ++v_ptr;
+  }
+  // для вольтметра среднее значение
+  v_vm /= (ADC2_SAMPLES_COUNT/2);
+  v_vm = filter_value( &g_vm, v_vm );
+  //
+  return (g_vm * (int)(v_settings->voltmeter)) / MAX_VOLTMETER_K_VALUE;
+}
+
+
 static void gui_items() {
   settings_t * v_settings = settings_get_current_profile();
   // здесь отрисовка статических элементов экрана
@@ -108,7 +172,7 @@ static void gui_items() {
       , "Порог"
       , &font_25_30_font
       , DISPLAY_COLOR_WHITE
-      , 0 == g_main_item ? DISPLAY_COLOR_BLUE : DISPLAY_COLOR_DARKBLUE
+      , MAIN_ITEM_BARRIER == g_main_item ? DISPLAY_COLOR_BLUE : DISPLAY_COLOR_DARKBLUE
       );
   sprintf( g_str, "%u", (unsigned int)v_settings->barrier_level );
   display_write_string_with_bg(
@@ -126,7 +190,7 @@ static void gui_items() {
       , "Громкость"
       , &font_25_30_font
       , DISPLAY_COLOR_WHITE
-      , 1 == g_main_item ? DISPLAY_COLOR_BLUE : DISPLAY_COLOR_DARKBLUE
+      , MAIN_ITEM_VOLUME == g_main_item ? DISPLAY_COLOR_BLUE : DISPLAY_COLOR_DARKBLUE
       );
   sprintf( g_str, "%u", (unsigned int)v_settings->level_sound );
   display_write_string_with_bg(
@@ -137,23 +201,14 @@ static void gui_items() {
       , DISPLAY_COLOR_WHITE
       , DISPLAY_COLOR_DARKGRAY
       );
-  // строка "Феррит"
-  display_write_string_with_bg(
-        0, VDI_LINES_HEIGHT + (font_25_30_font.m_row_height * 3)
-      , DISPLAY_WIDTH, font_25_30_font.m_row_height
-      , "Феррит"
-      , &font_25_30_font
-      , DISPLAY_COLOR_WHITE
-      , 2 == g_main_item ? DISPLAY_COLOR_MIDBLUE : DISPLAY_COLOR_DARKBLUE
-      );
   // строка "Грунт"
   display_write_string_with_bg(
-        0, VDI_LINES_HEIGHT + (font_25_30_font.m_row_height * 4)
+        0, VDI_LINES_HEIGHT + (font_25_30_font.m_row_height * 3)
       , DISPLAY_WIDTH, font_25_30_font.m_row_height
       , "Грунт"
       , &font_25_30_font
       , DISPLAY_COLOR_WHITE
-      , 3 == g_main_item ? DISPLAY_COLOR_MIDBLUE : DISPLAY_COLOR_DARKBLUE
+      , MAIN_ITEM_GROUND == g_main_item ? DISPLAY_COLOR_MIDBLUE : DISPLAY_COLOR_DARKBLUE
       );
 }
 
@@ -270,6 +325,25 @@ static void gui_main() {
   sprintf( g_str, "%u", (unsigned int)v_time );
   display_write_string_with_bg( 0, 64, 64, 30, g_str, &font_25_30_font, DISPLAY_COLOR_YELLOW, DISPLAY_COLOR_BLACK );
   */
+  // вывод
+  int v_vm = get_vm_value();
+  int v_mam = get_mam_value();
+  snprintf(
+      g_str
+    , sizeof(g_str)
+    , "%2d.%02d В | %4d пп"
+    , v_vm / 100, v_vm % 100
+    , v_mam
+    );
+  // показометры
+  display_write_string_with_bg(
+        0, VDI_LINES_HEIGHT + (font_25_30_font.m_row_height * 4)
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , g_str
+      , &font_25_30_font
+      , DISPLAY_COLOR_GREEN
+      , DISPLAY_COLOR_DARKGREEN
+      );
   // кнопки
   uint32_t v_changed = get_changed_buttons();
   uint32_t v_buttons = get_buttons_state();
@@ -308,9 +382,6 @@ static void gui_main() {
           }
           break;
           
-        case MAIN_ITEM_FERRITE:
-          break;
-          
         case MAIN_ITEM_GROUND:
           break;
           
@@ -336,9 +407,6 @@ static void gui_main() {
             set_sound_volume( v_settings->level_sound );
             gui_items();
           }
-          break;
-          
-        case MAIN_ITEM_FERRITE:
           break;
           
         case MAIN_ITEM_GROUND:
@@ -430,8 +498,6 @@ void gui_process() {
 static void mi_tx_gen() {
   // для получения первого значения
   g_tmp = -1;
-  // подключаем канал IN3 АЦП
-  adc_select_channel( ADC_IN_TX );
   // здесь отрисовка статических элементов экрана
   // строка заголовка
   display_write_string_with_bg(
@@ -514,29 +580,20 @@ static void rx_balance_init_screen() {
 
 
 static void mi_rx_balance() {
+  adc_select_channel( ADC_IN_RX );
   rx_balance_init_screen();
   // для получения первого значения
   g_tmp = -1;
 }
 
 
-static void mi_mask() {
-  settings_t * v_current_profile = settings_get_current_profile();
-  uint32_t v_y_offset = 0;
-  // строка заголовка
-  display_write_string_with_bg(
-        0, 0
-      , DISPLAY_WIDTH, font_25_30_font.m_row_height
-      , g_top_menu[MENU_ITEM_MASK].name
-      , &font_25_30_font
-      , DISPLAY_COLOR_YELLOW
-      , DISPLAY_COLOR_MIDBLUE
-      );
-  v_y_offset += font_25_30_font.m_row_height;
+static void mask_init_screen() {
+  settings_t * v_settings = settings_get_current_profile();
+  uint32_t v_y_offset = font_25_30_font.m_row_height;
   // рисуем полосу на 360 градусов и маску, ширина маски в градусах
   // вычмсляем ширины маски в пикселях
-  uint32_t v_mask_width = v_current_profile->mask_width * VDI_LINES_WIDTH / VDI_SECTOR_DEGREES;
-  // сектор макси
+  uint32_t v_mask_width = v_settings->mask_width * VDI_LINES_WIDTH / VDI_SECTOR_DEGREES;
+  // сектор маски
   display_fill_rectangle_dma_fast(
         0, v_y_offset
       , v_mask_width, VDI_LINES_HEIGHT
@@ -551,12 +608,11 @@ static void mi_mask() {
       );
   v_y_offset += VDI_LINES_HEIGHT;
   // ширина сектора маски в градусах
-  char v_str[32];
-  snprintf( v_str, sizeof(v_str), "%u", (unsigned int)v_current_profile->mask_width );
+  snprintf( g_str, sizeof(g_str), "%u", (unsigned int)v_settings->mask_width );
   display_write_string_with_bg(
         0, v_y_offset
       , DISPLAY_WIDTH, font_25_30_font.m_row_height
-      , v_str
+      , g_str
       , &font_25_30_font
       , DISPLAY_COLOR_WHITE
       , DISPLAY_COLOR_DARKGRAY
@@ -564,15 +620,64 @@ static void mi_mask() {
 }
 
 
+static void mi_mask() {
+  // строка заголовка
+  display_write_string_with_bg(
+        0, 0
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , g_top_menu[MENU_ITEM_MASK].name
+      , &font_25_30_font
+      , DISPLAY_COLOR_YELLOW
+      , DISPLAY_COLOR_MIDBLUE
+      );
+  //
+  mask_init_screen();
+}
+
+
 static void mi_ferrite() {
+  // запоминаем время захода в калиброку
+  g_tmp_ui32 = g_milliseconds;
+  // выбираем канал АЦП от датчика
+  adc_select_channel( ADC_IN_ACC );
+  // строка заголовка
+  display_write_string_with_bg(
+        0, 0
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , g_top_menu[MENU_ITEM_FERRITE].name
+      , &font_25_30_font
+      , DISPLAY_COLOR_YELLOW
+      , DISPLAY_COLOR_MIDBLUE
+      );
+  // зачистка под текст
+  display_fill_rectangle_dma_fast(
+        0, font_25_30_font.m_row_height
+      , DISPLAY_WIDTH, DISPLAY_HEIGHT - font_25_30_font.m_row_height
+      , DISPLAY_BYTE_COLOR_BLACK
+      );
+  // текст
+  display_write_string(
+        0, font_25_30_font.m_row_height
+      , "Поднесите кусочек феррита к датчику, затем уберите его. Повторите 4 раза. На всё про всё 30 секунд."
+      , &font_25_30_font
+      , DISPLAY_COLOR_CYAN
+      , DISPLAY_COLOR_BLACK
+      );
+  // счётчик поднесений
+  display_write_string_with_bg(
+        0, DISPLAY_HEIGHT - font_25_30_font.m_row_height
+      , DISPLAY_WIDTH, font_25_30_font.m_row_height
+      , "Феррит поднесён: 0"
+      , &font_25_30_font
+      , DISPLAY_COLOR_GREEN
+      , DISPLAY_COLOR_DARKGREEN
+      );
 }
 
 
 static void mi_power() {
   // для получения первого значения
   g_tmp = -1;
-  // подключаем канал IN2 АЦП
-  adc_select_channel( ADC_IN_ACC );
   // строка заголовка
   display_write_string_with_bg(
         0, 0
@@ -711,45 +816,9 @@ static void back_to_settings( int a_from_item ) {
 
 static void mh_tx_gen() {
   settings_t * v_current_profile = settings_get_current_profile();
-  // индекс
-  int fft_idx = get_fft_idx();
-  // ждём заполнения буфера
-  bool v_last_flag = adc_buffer_flag();
-  while ( adc_buffer_flag() == v_last_flag ) {}
-  // быстренько получим адрес буфера
-  uint16_t * v_from = adc_get_buffer();
-  // копируем выборки в буфер
-  for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
-    g_x[i] = ((int)v_from[i]) << 16;
-    g_y[i] = 0;
-  }
-  // БПФ по данным от АЦП
-  BPF( g_x, g_y );
-  int v_len;
-  for ( int i = 0; i < 13; ++i ) {
-    v_len = g_x[i];
-    int v_d = full_atn( &v_len, g_y[i] );
-    v_len /= 65536;
-    printf(
-        "[%2d]%d x=%4d|y=%4d|r=%4d|d=%3d.%03d\n"
-      , i
-      , i == fft_idx ? 1 : 0
-      , g_x[i] / 65536
-      , g_y[i] / 65536
-      , v_len
-      , v_d / 65536, ((v_d & 0xFFFF) * 1000) / 65536
-      );
-  }
-  // значение "силы тока"
-  v_len = g_x[fft_idx];
-  full_atn( &v_len, g_y[fft_idx] );
-  if ( -1 == g_tmp ) {
-    g_tmp = v_len;
-  } else {
-    g_tmp = (v_len / 16) + ((g_tmp * 15) / 16);
-  }
+  int v_mam = get_mam_value();
   // с учётом номиналом элементов схемы
-  sprintf( g_str, "%u", (unsigned int)((v_current_profile->ampermeter * ((uint64_t)g_tmp)) >> 32) );
+  sprintf( g_str, "%d", v_mam );
   display_write_string_with_bg(
           DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height
         , DISPLAY_WIDTH - (DISPLAY_WIDTH*2/3), font_25_30_font.m_row_height
@@ -960,66 +1029,37 @@ static void mh_mask() {
     if ( 0 != (v_changed & BT_OK_mask) && 0 == (v_buttons & BT_OK_mask) ) {
       // нажата кнопка "OK"
       back_to_settings( MENU_ITEM_MASK );
+      return;
     }
-    uint32_t v_y_offset = font_25_30_font.m_row_height;
-    // рисуем полосу на 360 градусов и маску, ширина маски в градусах
-    // вычмсляем ширины маски в пикселях
-    uint32_t v_mask_width = v_settings->mask_width * VDI_LINES_WIDTH / VDI_SECTOR_DEGREES;
-    // сектор маски
-    display_fill_rectangle_dma_fast(
-          0, v_y_offset
-        , v_mask_width, VDI_LINES_HEIGHT
-        , DISPLAY_BYTE_COLOR_DARK_GREEN
-        );
-    // сектор озвучки
-    display_fill_rectangle_dma_fast(
-          v_mask_width, v_y_offset
-        , DISPLAY_WIDTH - v_mask_width
-        , VDI_LINES_HEIGHT
-        , VDI_FFT_COLOR
-        );
-    v_y_offset += VDI_LINES_HEIGHT;
-    // ширина сектора маски в градусах
-    char v_str[32];
-    snprintf( v_str, sizeof(v_str), "%u", (unsigned int)v_settings->mask_width );
-    display_write_string_with_bg(
-          0, v_y_offset
-        , DISPLAY_WIDTH, font_25_30_font.m_row_height
-        , v_str
-        , &font_25_30_font
-        , DISPLAY_COLOR_WHITE
-        , DISPLAY_COLOR_DARKGRAY
-        );
+    //
+    mask_init_screen();
   }
 }
 
 
 static void mh_ferrite() {
+  // проверим длительность
+  if ( ((uint32_t)(g_milliseconds - g_tmp_ui32)) >= FERRITE_CALIB_TIMEOUT ) {
+    display_write_string_with_bg(
+          0, DISPLAY_HEIGHT / 4
+        , DISPLAY_WIDTH, DISPLAY_HEIGHT / 2
+        , "Время вышло"
+        , &font_25_30_font
+        , DISPLAY_COLOR_WHITE
+        , DISPLAY_COLOR_MIDRED
+        );
+    //
+    delay_ms( 2000u );
+    back_to_settings( MENU_ITEM_FERRITE );
+    return;
+  }
 }
 
 
 static void mh_power() {
   settings_t * v_settings = settings_get_current_profile();
-  // ждём заполнения буфера
-  bool v_last_flag = adc_buffer_flag();
-  while ( adc_buffer_flag() == v_last_flag ) {}
-  // быстренько получим адрес буфера
-  uint16_t * v_from = adc_get_buffer();
-  // собираем среднее значение
-  int v_avg = 0;
-  for ( int i = 0; i < ADC_SAMPLES_COUNT; ++i ) {
-    v_avg += v_from[i];
-  }
-  //
-  v_avg /= (ADC_SAMPLES_COUNT/2);
-  //
-  if ( -1 == g_tmp ) {
-    g_tmp = v_avg;
-  } else {
-    g_tmp = (v_avg / 8) + ((v_avg * 7) / 8);
-  }
-  int v_volts = (g_tmp * (int)(v_settings->voltmeter)) / MAX_VOLTMETER_K_VALUE;
   // значение напряжения питания
+  int v_volts = get_vm_value();
   sprintf( g_str, "%d.%02d", v_volts / 100, v_volts % 100 );
   display_write_string_with_bg(
           DISPLAY_WIDTH*2/3, font_25_30_font.m_row_height

@@ -15,8 +15,8 @@ void logBufferInHex(const unsigned char *src, int len);
 
 // STM32G431CBU6 назначение выводов, всё использованное
 // -> АЦП
+// PA0 - ADC12_IN1
 // PA1 - ADC12_IN2
-// PA2 - ADC1_IN3
 // PA3 - ADC1_IN4
 // -> ЦАП
 // PA4 - DAC1_OUT1, PA5 - DAC1_OUT2 (Analog)
@@ -32,7 +32,7 @@ void logBufferInHex(const unsigned char *src, int len);
 // -> кнопки
 // PB10..PB14
 
-// PA: 1, 2, 3, 4, 5, 8, 9
+// PA: 0, 1, 3, 4, 5, 8, 9
 // PB: 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14
 // PC: 6
 
@@ -128,10 +128,11 @@ void run() {
   // PC6 - output push-pull, low speed, синий светодиод, подключен к GND
   GPIOC->OTYPER = 0;
   GPIOC->OSPEEDR = 0;
-  GPIOC->MODER = (GPIOC->MODER & ~GPIO_MODER_MODE6)
+  GPIOC->MODER = (GPIOC->MODER & ~(GPIO_MODER_MODE6 | GPIO_MODER_MODE13))
                | GPIO_MODER_MODE6_0
+               | GPIO_MODER_MODE13_0
                ;
-  GPIOC->BSRR = GPIO_BSRR_BS6;
+  GPIOC->BSRR = GPIO_BSRR_BS6 | GPIO_BSRR_BS13;
   //
   settings_init();
   buttons_init();
