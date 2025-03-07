@@ -8,7 +8,7 @@
 
 
 extern volatile uint32_t g_milliseconds;
-
+void delay_ms( uint32_t a_ms );
 
 // профили настроек
 static settings_t g_profiles[PROFILES_COUNT];
@@ -246,16 +246,16 @@ void settings_init() {
     // частота генератора 140625 * 268435456 / (2^32) = 8789.0625 Гц, 140625 Гц - опорная частота DDS генератора
     // 2^32 - период в 360 градусов
     g_profiles[i].gen_freq = 268435456u;
-    g_profiles[i].level_comp = 30;
-    g_profiles[i].level_sound = 500;
-    g_profiles[i].level_tx = 300;
+    g_profiles[i].level_comp = 250;
+    g_profiles[i].level_sound = 300;
+    g_profiles[i].level_tx = 250;
     g_profiles[i].mask_width = 16;
     g_profiles[i].barrier_level = 99;
     g_profiles[i].phase_comp_start = 0;
     // определяется схемотехническим решением (конкретными сопротивлениями резисторов делителя)
     g_profiles[i].voltmeter = 32208u;
     // определяется схемотехническим решением (значением сопротивления резистора шунта и параметрами фильтра)
-    g_profiles[i].ampermeter = 115852u;
+    g_profiles[i].ampermeter = 11585u;
     for ( int r = 0; r < (int)(sizeof(g_profiles[0].reserved)/sizeof(g_profiles[0].reserved[0])); ++r ) {
       g_profiles[i].reserved[r] = 0;
     }
@@ -316,8 +316,9 @@ bool load_profile( settings_t * a_src ) {
     // отключаем ADC и DDS
     gen_dds_shutdown();
     adc_shutdown();
+    delay_ms( 2u );
     // заново запускаем
-    adc_startup( ADC_IN_RX );
+    adc_init();
     gen_dds_startup();
     return true;
   } else {

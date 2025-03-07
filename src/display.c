@@ -5,6 +5,7 @@
 #define ILI9341_RESET           0x01
 #define ILI9341_SLEEP_OUT       0x11
 #define ILI9341_INVOFF          0x20
+#define ILI9341_INVON           0x21
 #define ILI9341_GAMMA				    0x26
 #define ILI9341_DISPLAY_OFF     0x28
 #define ILI9341_DISPLAY_ON      0x29
@@ -49,7 +50,7 @@
 extern volatile uint32_t g_milliseconds;
 void delay_ms( uint32_t a_ms );
 
-
+/*
 static const uint8_t g_ili9341_init[] = {
   0x05, ILI9341_POWERA, 0x39, 0x2C, 0x00, 0x34, 0x02
 , 0x03, ILI9341_POWERB, 0x00, 0xC1, 0x30
@@ -72,6 +73,14 @@ static const uint8_t g_ili9341_init[] = {
 , 0x0F, 0xE1, 0x00, 0x0E, 0x14, 0x03, 0x11, 0x07, 0x31, 0xC1, 0x48, 0x08, 0x0F, 0x0C, 0x31, 0x36, 0x0F // ILI9341_NGAMMA
 , 0x00 // end marker
 };
+*/
+// Init commands for 7789 screens
+static const uint8_t g_ili9341_init[] =  {
+    1, ILI9341_PIXEL_FORMAT, 0x55
+  , 1, ILI9341_MAC, ILI9341_MAC_MV | ILI9341_MAC_RGB | ILI9341_MAC_MY
+  , 0
+};
+
 
 
 static void display_select() {
@@ -377,6 +386,8 @@ void display_init() {
     // advance ptr
     v_ptr += v_cnt;
   }
+  //display_write_cmd_dma( ILI9341_INVON );
+  //delay_ms(11);
   display_write_cmd_dma( ILI9341_SLEEP_OUT );
   delay_ms(6);
   display_write_cmd_dma( ILI9341_DISPLAY_ON );

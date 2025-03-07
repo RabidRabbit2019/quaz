@@ -1687,7 +1687,7 @@
     (in_bom yes) (on_board yes) (fields_autoplaced)
     (uuid 1ccf423b-e242-4647-88be-a60f0c1527b0)
     (property "Reference" "R2" (id 0) (at 64.77 52.07 90))
-    (property "Value" "1" (id 1) (at 64.77 54.61 90))
+    (property "Value" "2" (id 1) (at 64.77 54.61 90))
     (property "Footprint" "Resistor_THT:R_Axial_Power_L20.0mm_W6.4mm_P7.62mm_Vertical" (id 2) (at 64.77 60.198 90)
       (effects (font (size 1.27 1.27)) hide)
     )
@@ -2637,7 +2637,7 @@
       (reference "R1") (unit 1) (value "5.1K") (footprint "Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder")
     )
     (path "/1ccf423b-e242-4647-88be-a60f0c1527b0"
-      (reference "R2") (unit 1) (value "1") (footprint "Resistor_THT:R_Axial_Power_L20.0mm_W6.4mm_P7.62mm_Vertical")
+      (reference "R2") (unit 1) (value "2") (footprint "Resistor_THT:R_Axial_Power_L20.0mm_W6.4mm_P7.62mm_Vertical")
     )
     (path "/1838c54b-71ef-4c33-815a-8f395d759ee0"
       (reference "R3") (unit 1) (value "1") (footprint "Resistor_THT:R_Axial_Power_L20.0mm_W6.4mm_P7.62mm_Vertical")

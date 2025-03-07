@@ -55,7 +55,21 @@ uint16_t * adc_get_buffer() {
 // ADC1_IN4      PA3 - сигнал от входного усилителя
 
 
-void adc_startup( unsigned int a_adc_input ) {
+void adc_init() {
+  // источник тактирования ADC1 - System clock, т.е. 144 МГц
+  RCC->CCIPR = (RCC->CCIPR & ~(RCC_CCIPR_ADC12SEL))
+             | RCC_CCIPR_ADC12SEL_1
+             ;
+  // включаем тактирование ADC
+  RCC->AHB2ENR |= RCC_AHB2ENR_ADC12EN;
+  // тактирование АЦП
+  ADC12_COMMON->CCR = ADC_CCR_CKMODE; // делим 144 МГц (AHB) на 4, получаем 36 МГц
+  // тактирование DMA1 и DMAMUX1 включено в main.c
+  // PA0, PA1, PA3 - аналоговый режим
+  GPIOA->MODER |= ( GPIO_MODER_MODE0
+                  | GPIO_MODER_MODE1
+                  | GPIO_MODER_MODE3
+                  );
   // настраиваем канал 1 DMA для получения данных от АЦП
   DMA1_Channel1->CCR = 0;
   DMA1_Channel1->CPAR = (uint32_t)&ADC1->DR;
@@ -105,7 +119,7 @@ void adc_startup( unsigned int a_adc_input ) {
               | ADC_SMPR1_SMP3_0 | ADC_SMPR1_SMP3_2
               | ADC_SMPR1_SMP2_0 | ADC_SMPR1_SMP2_2
               ;
-  ADC1->SQR1 = (a_adc_input & 0x1F) << ADC_SQR1_SQ1_Pos;
+  ADC1->SQR1 = (ADC_IN_RX & 0x1F) << ADC_SQR1_SQ1_Pos;
   ADC1->CFGR = ADC_CFGR_EXTEN_0
              | ADC_CFGR_EXTSEL_2
              | ADC_CFGR_DMACFG
@@ -113,26 +127,6 @@ void adc_startup( unsigned int a_adc_input ) {
              ;
   // запускаем преобразования
   ADC1->CR |= ADC_CR_ADSTART;
-}
-
-
-void adc_init() {
-  // источник тактирования ADC1 - System clock, т.е. 144 МГц
-  RCC->CCIPR = (RCC->CCIPR & ~(RCC_CCIPR_ADC12SEL))
-             | RCC_CCIPR_ADC12SEL_1
-             ;
-  // включаем тактирование ADC
-  RCC->AHB2ENR |= RCC_AHB2ENR_ADC12EN;
-  // тактирование АЦП
-  ADC12_COMMON->CCR = ADC_CCR_CKMODE; // делим 144 МГц (AHB) на 4, получаем 36 МГц
-  // тактирование DMA1 и DMAMUX1 включено в main.c
-  // PA0, PA1, PA3 - аналоговый режим
-  GPIOA->MODER |= ( GPIO_MODER_MODE0
-                  | GPIO_MODER_MODE1
-                  | GPIO_MODER_MODE3
-                  );
-  //
-  adc_startup( ADC_IN_RX );
   // теперь запустим ADC2 для получения значений для вольтметра и миллиамперметра
   // PA0 - ADC12_IN1 - вольтметр
   // PA1 - ADC12_IN2 - миллиамперметр
@@ -179,8 +173,8 @@ void adc_init() {
   ADC2->SMPR1 = ADC_SMPR1_SMP2_2 | ADC_SMPR1_SMP2_1
               | ADC_SMPR1_SMP1_2 | ADC_SMPR1_SMP1_1
               ;
-  ADC2->SQR1 = (1 << ADC_SQR1_SQ1_Pos)
-             | (2 << ADC_SQR1_SQ2_Pos)
+  ADC2->SQR1 = (ADC_IN_TX << ADC_SQR1_SQ1_Pos)
+             | (ADC_IN_ACC << ADC_SQR1_SQ2_Pos)
              | ADC_SQR1_L_0
              ;
   ADC2->CFGR = ADC_CFGR_CONT
@@ -192,17 +186,33 @@ void adc_init() {
 }
 
 
+void adc_reinit() {
+  gen_dds_shutdown();
+  adc_shutdown();
+  delay_ms( 2u );
+  adc_init();
+  gen_dds_init();
+}
+
+
 void adc_shutdown() {
   // отключаем прерывание
   __NVIC_DisableIRQ( DMA1_Channel1_IRQn );
-  // останавливаем преобразование
+  // АЦП1 останавливаем преобразование
   ADC1->CR |= ADC_CR_ADSTP;
   // ждём останова
   while ( 0 != (ADC1->CR & (ADC_CR_ADSTART | ADC_CR_ADSTP)) ) {}
   // отключаем ADC1
   ADC1->CR |= ADC_CR_ADDIS;
   while ( 0 != (ADC1->CR & ADC_CR_ADEN) ) {}
-  // делаем сброс ADC1
+  // АЦП2 останавливаем преобразование
+  ADC2->CR |= ADC_CR_ADSTP;
+  // ждём останова
+  while ( 0 != (ADC2->CR & (ADC_CR_ADSTART | ADC_CR_ADSTP)) ) {}
+  // отключаем ADC2
+  ADC2->CR |= ADC_CR_ADDIS;
+  while ( 0 != (ADC2->CR & ADC_CR_ADEN) ) {}
+  // делаем сброс ADC12
   RCC->AHB2RSTR = RCC_AHB2RSTR_ADC12RST;
   delay_ms( 2u );
   RCC->AHB2RSTR = 0;
@@ -212,6 +222,13 @@ void adc_shutdown() {
              | DMA_IFCR_CHTIF1
              | DMA_IFCR_CTEIF1
              | DMA_IFCR_CGIF1
+             ;
+  // отключаем DMA1 Channel4
+  DMA1_Channel4->CCR = 0;
+  DMA1->IFCR = DMA_IFCR_CTCIF4
+             | DMA_IFCR_CHTIF4
+             | DMA_IFCR_CTEIF4
+             | DMA_IFCR_CGIF4
              ;
   // начальные значения переменных
   g_tx_phase_1 = 0;
@@ -250,16 +267,6 @@ void ih_DMA1_Channel1_IRQ() {
              | DMA_IFCR_CTEIF1
              | DMA_IFCR_CGIF1
              ;
-}
-
-
-// установка канала
-void adc_select_channel( int a_channel ) {
-  gen_dds_shutdown();
-  adc_shutdown();
-  delay_ms( 2u );
-  adc_startup( a_channel );
-  gen_dds_startup();
 }
 
 

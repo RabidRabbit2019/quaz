@@ -138,7 +138,8 @@ static int get_mam_value() {
   if ( v_mam_max < v_mam_min ) {
     v_mam_max = v_mam_min;
   }
-  return filter_value( &g_mam, v_mam_max - v_mam_min );
+  settings_t * v_settings = settings_get_current_profile();
+  return (filter_value( &g_mam, v_mam_max - v_mam_min ) * v_settings->ampermeter) / 16384;
 }
 
 
@@ -460,8 +461,8 @@ static void gui_settings() {
           
           // чтобы определить наличие изменений, проверим CRC32 профиля
           
-          // подключаем канал IN4 АЦП
-          adc_select_channel( ADC_IN_RX );
+          //
+          //adc_reinit();
           //
           gui_items();
           g_gui_mode = GUI_MODE_MAIN;
@@ -580,7 +581,6 @@ static void rx_balance_init_screen() {
 
 
 static void mi_rx_balance() {
-  adc_select_channel( ADC_IN_RX );
   rx_balance_init_screen();
   // для получения первого значения
   g_tmp = -1;
@@ -638,8 +638,6 @@ static void mi_mask() {
 static void mi_ferrite() {
   // запоминаем время захода в калиброку
   g_tmp_ui32 = g_milliseconds;
-  // выбираем канал АЦП от датчика
-  adc_select_channel( ADC_IN_ACC );
   // строка заголовка
   display_write_string_with_bg(
         0, 0

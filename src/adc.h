@@ -13,9 +13,8 @@
 #define ADC_IN_ACC    2
 
 void adc_init();
-void adc_startup( unsigned int a_adc_input );
 void adc_shutdown();
-void adc_select_channel( int );
+void adc_reinit();
 
 
 bool adc_buffer_flag();
