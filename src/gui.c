@@ -264,8 +264,10 @@ static void gui_main() {
   int v_tx_phase_deg = (int)(((360ull << 16) * v_tx_phase) / 0x100000000ull);
   // БПФ по данным от АЦП
   BPF( g_x, g_y );
+#ifdef USE_DEBUG_OUTPUT
   printf( "---- %3d.%03d ----\n", v_tx_phase_deg / 65536, ((v_tx_phase_deg & 0xFFFF) * 1000) / 65536 );
   printf( "---- %u, %X ----\n", (unsigned int)v_tx_phase, (unsigned int)v_from );
+#endif
   int v_len = g_x[fft_idx];
   int v_d = full_atn( &v_len, g_y[fft_idx] ) - v_tx_phase_deg;
   if ( v_d < 0 ) {
@@ -313,6 +315,7 @@ static void gui_main() {
       , DISPLAY_COLOR_RED
       , DISPLAY_COLOR_DARKRED
       );
+#ifdef USE_DEBUG_OUTPUT
   printf(
       "[%2d] x=%4d|y=%4d|r=%4d|d=%3d.%03d\n"
     , fft_idx
@@ -321,6 +324,7 @@ static void gui_main() {
     , v_len
     , v_d / 65536, ((v_d & 0xFFFF) * 1000) / 65536
     );
+#endif
   /*
   uint32_t v_time = g_milliseconds - v_start_ts;
   sprintf( g_str, "%u", (unsigned int)v_time );

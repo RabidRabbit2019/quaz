@@ -53,7 +53,8 @@ debug:
 	  fonts/font_bmp.c \
 	  fonts/font_25_30.c \
 	  -ffunction-sections -fdata-sections -mcpu=cortex-m4 -mthumb -lnosys -nostartfiles \
-	  -ffreestanding -specs=nosys.specs -pipe
+	  -ffreestanding -specs=nosys.specs -pipe \
+	  -DUSE_DEBUG_OUTPUT
 	arm-none-eabi-gcc \
 	  vectors.o \
 	  main.o \
